@@ -273,9 +273,13 @@ public class ClientGUI extends JFrame {
 			ArrayList<String> viewers = new ArrayList<>();
 			
 			for (Component user : usersPanel.getComponents())
-				if (user instanceof JCheckBox checkBox && checkBox.isSelected()) {
-					viewers.add(checkBox.getText());
-					checkBox.setSelected(false);
+				if (user instanceof JCheckBox) {
+					JCheckBox checkBox = (JCheckBox) user;
+					
+					if (checkBox.isSelected()) {
+						viewers.add(checkBox.getText());
+						checkBox.setSelected(false);
+					}
 				}
 			
 			if (viewers.isEmpty()) return;

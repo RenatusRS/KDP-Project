@@ -101,8 +101,7 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 	public void syncUsers() throws RemoteException {
 		ArrayList<String> users = subserver.getUsers();
 		
-		for (Component user : gui.usersPanel.getComponents()) if (user instanceof JCheckBox checkBox) users.remove(checkBox.getText());
-		
+		for (Component user : gui.usersPanel.getComponents()) if (user instanceof JCheckBox) users.remove(((JCheckBox) user).getText());
 		for (String user : users) if (!user.equals(username)) addUser(user);
 	}
 	

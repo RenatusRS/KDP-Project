@@ -1,12 +1,14 @@
 package client;
 
+import shared.Data;
 import shared.Room;
-import shared.Video;
 
 import javax.security.auth.login.LoginException;
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.ItemEvent;
 import java.awt.event.MouseAdapter;
@@ -26,28 +28,31 @@ public class ClientGUI extends JFrame {
 	
 	final JTabbedPane tabbedPane = new JTabbedPane();
 	
-	private final JTextField textUsername = new JTextField();
+	private final JTextField textUsername = new JTextField(18);
 	private final JTextField textPassword = new JPasswordField();
 	private final JTextField textPasswordConfirm = new JPasswordField();
 	private final JButton buttonLogin = new JButton("Login");
 	
-	private final JPanel notificationsPanel = new JPanel(new GridLayout(0, 1));
-	private final JPanel videosPanel = new JPanel(new GridLayout(0, 1));
+	private final JPanel notificationsPanel = new JPanel();
+	private final JPanel videosPanel = new JPanel();
 	
-	final JLabel labelConnection = new JLabel("STATUS: Disconnected", JLabel.LEFT);
+	final JLabel labelConnection = new JLabel("STATUS: No Connection Attempts", JLabel.LEFT);
 	
-	private final Player player = new Player();
+	final Player player = new Player();
 	
 	final JComboBox<Room> rooms = new JComboBox<>();
 	
 	final JPanel usersPanel = new JPanel();
 	
 	final JButton uploadButton = new JButton("Upload");
+	final JButton createRoom = new JButton("Create Room");
 	
-	private String localVideo = null;
-	private long localTime = 0;
+	final JLabel labelError = new JLabel("", JLabel.CENTER);
 	
-	private Thread thread;
+	private JFileChooser fileChooser;
+	
+	Thread syncThread;
+	Thread uploadThread;
 	
 	final JPanel loginPanel = loginPanel();
 	final JPanel browsePanel = browsePanel();
@@ -57,7 +62,8 @@ public class ClientGUI extends JFrame {
 		this.owner = owner;
 		
 		setTitle("KDP Project");
-		setBounds(250, 250, 1080, 720);
+		setBounds(250, 250, 852, 480);
+		setMinimumSize(new Dimension(852, 480));
 		
 		setDefaultCloseOperation(EXIT_ON_CLOSE);
 		
@@ -70,10 +76,36 @@ public class ClientGUI extends JFrame {
 		setVisible(true);
 	}
 	
-	private JPanel loginPanel() {
-		JPanel loginPanel = new JPanel(new GridLayout(0, 1, 5, 15));
+	public void start() {
+		tabbedPane.removeAll();
 		
-		JLabel labelError = new JLabel("", JLabel.CENTER);
+		tabbedPane.add(browsePanel, "Browse");
+		tabbedPane.add(watchPanel, "Watch");
+	}
+	
+	public void restart() {
+		setTitle("KDP Project");
+		
+		labelConnection.setText("STATUS: Disconnected");
+		labelConnection.setForeground(Color.RED);
+		labelError.setText("Disconnected from network, register or sign in again");
+		
+		tabbedPane.removeAll();
+		
+		notificationsPanel.removeAll();
+		rooms.removeAllItems();
+		videosPanel.removeAll();
+		usersPanel.removeAll();
+		
+		tabbedPane.add(loginPanel, "Login");
+	}
+	
+	private JPanel loginPanel() {
+		JPanel loginPanel = new JPanel(new GridBagLayout());
+		loginPanel.setBorder(new EmptyBorder(4, 4, 4, 4));
+		
+		JPanel fieldsPanel = new JPanel(new GridLayout(0, 1));
+		fieldsPanel.setBorder(new EmptyBorder(50, 90, 50, 90));
 		
 		labelError.setForeground(Color.red);
 		
@@ -105,14 +137,11 @@ public class ClientGUI extends JFrame {
 				
 				owner.username = textUsername.getText();
 				
-				if (textPasswordConfirm.getText().isEmpty()) owner.signIn(textUsername.getText(), textPassword.getText(), false);
+				if (textPasswordConfirm.getText().isEmpty()) owner.loggedIn(textUsername.getText(), textPassword.getText(), false);
 				else {
 					if (!textPassword.getText().equals(textPasswordConfirm.getText())) throw new LoginException("Password confirmation incorrect!");
-					
-					owner.signIn(textUsername.getText(), textPassword.getText(), true);
+					owner.loggedIn(textUsername.getText(), textPassword.getText(), true);
 				}
-				
-				owner.loggedIn(textUsername.getText());
 			} catch (LoginException e) {
 				labelError.setText(e.getMessage());
 			} catch (RemoteException e) {
@@ -122,14 +151,16 @@ public class ClientGUI extends JFrame {
 			}
 		});
 		
-		loginPanel.add(new JLabel("Username"));
-		loginPanel.add(textUsername);
-		loginPanel.add(new JLabel("Password"));
-		loginPanel.add(textPassword);
-		loginPanel.add(new JLabel("Confirm Password"));
-		loginPanel.add(textPasswordConfirm);
-		loginPanel.add(labelError);
-		loginPanel.add(buttonLogin);
+		fieldsPanel.add(new JLabel("Username"));
+		fieldsPanel.add(textUsername);
+		fieldsPanel.add(new JLabel("Password"));
+		fieldsPanel.add(textPassword);
+		fieldsPanel.add(new JLabel("Confirm Password"));
+		fieldsPanel.add(textPasswordConfirm);
+		fieldsPanel.add(labelError);
+		fieldsPanel.add(buttonLogin);
+		
+		loginPanel.add(fieldsPanel);
 		
 		return loginPanel;
 	}
@@ -150,39 +181,70 @@ public class ClientGUI extends JFrame {
 		JPanel uploadPanel = new JPanel(new BorderLayout());
 		uploadPanel.setBorder(BorderFactory.createTitledBorder("Upload"));
 		
-		JFileChooser fileChooser = new JFileChooser();
+		LookAndFeel previousLF = UIManager.getLookAndFeel();
+		try {
+			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+			fileChooser = new JFileChooser();
+			fileChooser.setFileFilter(new FileNameExtensionFilter("Video Files (.mp4, .mov, .avi, ...)", "mp4", "mov", "avi", "mkv", "wmv", "webm"));
+			UIManager.setLookAndFeel(previousLF);
+		} catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException e) {
+			e.printStackTrace();
+		}
+		
 		JLabel fileLabel = new JLabel();
-		JButton fileButton = new JButton("Choose file");
+		JButton fileButton = new JButton("Choose File");
 		
 		fileButton.addActionListener((ae) -> {
 			if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) fileLabel.setText(fileChooser.getSelectedFile().getAbsolutePath());
 		});
 		
-		uploadButton.addActionListener((ae) -> (new Thread(() -> {
-			File file = fileChooser.getSelectedFile();
-			if (file == null) return;
-			
-			try {
-				if (!owner.subserver.validateVideo(file.getName())) return;
-				
-				try (InputStream is = new FileInputStream(file)) {
-					int readBytes;
-					byte[] b = new byte[1024 * 1024 * 32];
-					
-					while ((readBytes = is.read(b)) != -1) owner.subserver.addVideo(new Video(file.getName(), b, readBytes));
-				} catch (IOException e) {
-					throw new RuntimeException(e);
-				}
-				
-				owner.subserver.finalizeVideo(file.getName());
-			} catch (RemoteException e) {
-				e.printStackTrace();
+		uploadButton.addActionListener((ae) -> {
+			if (uploadThread != null && uploadThread.isAlive()) {
+				addNotification("Previous video sill uploading!");
+				return;
 			}
-		})).start());
+			
+			uploadThread = new Thread(() -> {
+				File file = fileChooser.getSelectedFile();
+				if (file == null) return;
+				
+				try {
+					if (!owner.subserver.videoNotExist(file.getName(), owner.username)) {
+						addNotification("Video '" + file.getName() + "' already exists");
+						return;
+					}
+					
+					try (InputStream is = new FileInputStream(file)) {
+						int readBytes;
+						byte[] b = new byte[1024 * 1024 * 32];
+						
+						while (!uploadThread.isInterrupted() && (readBytes = is.read(b)) != -1) owner.subserver.uplaodVideoDataToCentral(file.getName(), new Data(b, readBytes), owner.username);
+						
+						if (!Thread.interrupted()) owner.subserver.finalizeVideo(file.getName(), owner.username);
+					} catch (IOException e) {
+						e.printStackTrace();
+					} catch (LoginException e) {
+						addNotification(e.getMessage());
+					}
+				} catch (RemoteException | NullPointerException e) {
+					addNotification("ERROR: No connection to the server");
+				} finally {
+					uploadButton.setEnabled(true);
+				}
+			});
+			
+			uploadButton.setEnabled(false);
+			uploadThread.start();
+		});
 		
-		uploadPanel.add(fileLabel, BorderLayout.LINE_START);
-		uploadPanel.add(fileButton, BorderLayout.CENTER);
-		uploadPanel.add(uploadButton, BorderLayout.LINE_END);
+		
+		JPanel buttonsPanel = new JPanel(new BorderLayout());
+		
+		buttonsPanel.add(fileButton, BorderLayout.LINE_START);
+		buttonsPanel.add(uploadButton, BorderLayout.LINE_END);
+		
+		uploadPanel.add(fileLabel, BorderLayout.CENTER);
+		uploadPanel.add(buttonsPanel, BorderLayout.LINE_END);
 		
 		JPanel mainPanel = new JPanel(new BorderLayout());
 		
@@ -198,8 +260,6 @@ public class ClientGUI extends JFrame {
 	}
 	
 	private JPanel watchPanel() {
-		JButton createRoom = new JButton("Create Room");
-		
 		rooms.addItemListener(e -> {
 			if (e.getStateChange() != ItemEvent.SELECTED || tabbedPane.getSelectedIndex() != 1) return;
 			
@@ -207,15 +267,16 @@ public class ClientGUI extends JFrame {
 			
 			player.setControls(owner.username.equals(room.owner));
 			
-			if (thread != null) thread.interrupt();
+			if (syncThread != null) {
+				syncThread.interrupt();
+				try {
+					syncThread.join();
+				} catch (InterruptedException ex) {
+					ex.printStackTrace();
+				}
+			}
 			
 			if (room.toString().equals("0 | " + owner.username + " | Local Room")) {
-				if (localVideo != null) {
-					play(localVideo);
-					player.pause(true);
-					player.seek(localTime);
-				}
-				
 				createRoom.setEnabled(true);
 			} else {
 				try {
@@ -231,39 +292,52 @@ public class ClientGUI extends JFrame {
 				createRoom.setEnabled(false);
 				
 				Room finalRoom = room;
-				
-				thread = new Thread(() -> {
-					Room temp;
-					
+				if (finalRoom.owner.equals(owner.username)) syncThread = new Thread(() -> {
 					try {
-						while (true) {
+						while (!syncThread.isInterrupted()) {
 							try {
-								if (finalRoom.owner.equals(owner.username)) owner.subserver.setRoomData(finalRoom.getID(), player.progress.getValue(), player.getPaused());
-								else {
-									temp = owner.subserver.getRoomData(finalRoom.getID());
-									
-									System.out.println(temp.getTime() + " - " + player.getTime() + " = " + Math.abs(temp.getTime() - player.getTime()));
-									if (temp.getPaused()) {
-										player.pause(true);
-										if (temp.getTime() != player.getTime()) player.seek(temp.getTime());
-									} else {
-										if (player.getPaused() || Math.abs(temp.getTime() - player.getTime()) > 1000) player.seek(temp.getTime());
-										player.pause(false);
-									}
-								}
+								owner.subserver.setRoomData(finalRoom.getID(), player.progress.getValue(), player.getPaused());
 							} catch (RemoteException e1) {
 								if (!finalRoom.owner.equals(owner.username) && !player.getPaused()) player.pause(true);
 								addNotification("Lost connection to the server, stopping room updates");
-								this.wait();
+								
+								Thread.sleep(1500);
 							}
 							
-							Thread.sleep(1000);
+							Thread.sleep(250);
+						}
+					} catch (InterruptedException ignored) {
+					}
+				});
+				else syncThread = new Thread(() -> {
+					Room temp;
+					try {
+						while (!syncThread.isInterrupted()) {
+							try {
+								temp = owner.subserver.getRoomData(finalRoom.getID());
+								
+								System.out.println(temp.getTime() + " - " + player.getTime() + " = " + Math.abs(temp.getTime() - player.getTime()));
+								if (temp.getPaused()) {
+									player.pause(true);
+									if (temp.getTime() != player.getTime()) player.seek(temp.getTime());
+								} else {
+									if (player.getPaused() || Math.abs(temp.getTime() - player.getTime()) > 1000) player.seek(temp.getTime());
+									player.pause(false);
+								}
+								
+								Thread.sleep(250);
+							} catch (RemoteException e1) {
+								if (!finalRoom.owner.equals(owner.username) && !player.getPaused()) player.pause(true);
+								addNotification("Lost connection to the server, stopping room updates");
+								
+								Thread.sleep(1500);
+							}
 						}
 					} catch (InterruptedException ignored) {
 					}
 				});
 				
-				thread.start();
+				syncThread.start();
 			}
 		});
 		
@@ -296,8 +370,11 @@ public class ClientGUI extends JFrame {
 		JPanel roomPanel = new JPanel(new BorderLayout());
 		usersPanel.setLayout(new BoxLayout(usersPanel, BoxLayout.PAGE_AXIS));
 		
+		JScrollPane usersScroll = new JScrollPane(usersPanel,
+				JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+		
 		roomPanel.add(rooms, BorderLayout.PAGE_START);
-		roomPanel.add(usersPanel, BorderLayout.CENTER);
+		roomPanel.add(usersScroll, BorderLayout.CENTER);
 		roomPanel.add(createRoom, BorderLayout.PAGE_END);
 		
 		JPanel watchPanel = new JPanel(new BorderLayout());
@@ -309,15 +386,10 @@ public class ClientGUI extends JFrame {
 	}
 	
 	public void addRoom(Room room) {
-		if (rooms.getItemCount() == 0) {
-			Room localRoom = new Room("Local Room", owner.username, null);
-			localRoom.setID(0);
-			rooms.addItem(localRoom);
-		}
-		
 		rooms.addItem(room);
 		
-		if (!owner.username.equals(room.owner)) addNotification("User '" + room.owner + "' has added you to their room playing '" + room.video + "'");
+		if (!owner.username.equals(room.owner)) addNotification("ClientData '" + room.owner + "' has added you to their room playing '" + room.video + "'");
+		else rooms.setSelectedItem(room);
 	}
 	
 	public void addNotification(String text) {
@@ -337,10 +409,14 @@ public class ClientGUI extends JFrame {
 		
 		video.setMaximumSize(new Dimension(100, 100));
 		
-		video.setBorder(BorderFactory.createLineBorder(Color.black));
-		video.setBackground(Color.GRAY);
+		video.setBorder(BorderFactory.createLineBorder(new Color(214, 217, 223)));
+		video.setBackground(new Color(172, 0, 0));
 		
-		video.add(new JLabel(title));
+		JLabel titleLabel = new JLabel(title);
+		titleLabel.setForeground(Color.white);
+		titleLabel.setFont(new Font("Arial", Font.BOLD, 10));
+		
+		video.add(titleLabel);
 		
 		video.setMaximumSize(new Dimension(Integer.MAX_VALUE, video.getMinimumSize().height));
 		
@@ -352,6 +428,9 @@ public class ClientGUI extends JFrame {
 					addRoom(localRoom);
 				}
 				
+				if (syncThread != null) syncThread.interrupt();
+				createRoom.setEnabled(true);
+				player.setControls(true);
 				rooms.setSelectedIndex(0);
 				tabbedPane.setSelectedIndex(1);
 				
@@ -372,10 +451,6 @@ public class ClientGUI extends JFrame {
 	}
 	
 	public void play(String title) {
-		Room room = (Room) rooms.getSelectedItem();
-		
-		if (room == null || room.toString().equals("0 | " + owner.username + " | Local Room")) localVideo = title;
-		
 		player.play("uploads/client/" + owner.username + "/" + title);
 	}
 }

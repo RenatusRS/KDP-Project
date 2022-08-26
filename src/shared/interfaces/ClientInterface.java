@@ -1,19 +1,20 @@
 package shared.interfaces;
 
+import shared.Data;
 import shared.Room;
-import shared.Video;
 
+import javax.security.auth.login.LoginException;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
 
 public interface ClientInterface extends Remote {
-	public void download(Video video) throws RemoteException;
+	void uploadSubserverToClient(String video, Data data) throws RemoteException;
 	
-	public void finalizeVideo(String video) throws RemoteException;
+	void finalizeVideo(String video) throws RemoteException;
 	
-	public void addUser(String user) throws RemoteException;
+	void addUser(String user) throws RemoteException;
 	
-	public void addRoom(Room room) throws RemoteException;
+	void addRoom(Room room) throws RemoteException;
 	
-	public void assignSubserver(SubserverInterface subserver) throws RemoteException;
+	void assignSubserver(SubserverInterface subserver, String username, long wakeupTime) throws RemoteException, LoginException;
 }

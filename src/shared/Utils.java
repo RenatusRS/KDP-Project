@@ -4,7 +4,8 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class Cleanup {
+public class Utils {
+	
 	public static void cleanup(String location) {
 		Path path = Path.of(location);
 		
@@ -12,6 +13,13 @@ public class Cleanup {
 			File[] files = (new File(location)).listFiles();
 			
 			if (files != null) for (File file : files) file.delete();
+		}
+	}
+	
+	public static void sleep(int time) {
+		try {
+			Thread.sleep(time);
+		} catch (InterruptedException ignored) {
 		}
 	}
 }

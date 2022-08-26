@@ -1,9 +1,9 @@
 package shared.interfaces;
 
+import shared.ClientData;
+import shared.Data;
 import shared.Room;
 import shared.SubserverData;
-import shared.User;
-import shared.Video;
 
 import javax.security.auth.login.LoginException;
 import java.rmi.NotBoundException;
@@ -12,29 +12,29 @@ import java.rmi.RemoteException;
 import java.util.ArrayList;
 
 public interface CentralServerInterface extends Remote {
-	public void register(User user) throws RemoteException, LoginException;
+	long register(ClientData client) throws RemoteException, LoginException;
 	
-	public void login(User user) throws RemoteException, LoginException;
+	long login(ClientData client) throws RemoteException, LoginException;
 	
-	public SubserverData addSubserver(SubserverData server) throws RemoteException, NotBoundException;
+	void addSubserver(SubserverData server) throws RemoteException, NotBoundException;
 	
-	public void addVideo(Video video) throws RemoteException;
+	void uploadVideoDataToCentral(String video, Data data, String owner) throws RemoteException, LoginException;
 	
-	public Room getRoom(int room) throws RemoteException;
+	Room getRoomData(int room) throws RemoteException;
 	
-	public void syncRoom(int room, long time, boolean paused) throws RemoteException;
+	void setRoomData(int room, long time, boolean paused) throws RemoteException;
 	
-	public void createRoom(Room room) throws RemoteException;
+	void createRoom(Room room) throws RemoteException;
 	
-	public ArrayList<Room> getRooms(String username) throws RemoteException;
+	ArrayList<Room> getRooms(String username) throws RemoteException;
 	
-	public ArrayList<String> getUsers() throws RemoteException;
+	ArrayList<String> getUsers() throws RemoteException;
 	
-	public ArrayList<String> getAllVideoNames() throws RemoteException;
+	ArrayList<String> getAllVideoNames() throws RemoteException;
 	
-	public void getVideo(String video, int subserver) throws RemoteException, LoginException;
+	void requestVideoFromCentral(String video, int subserver) throws RemoteException, LoginException;
 	
-	public boolean validateName(String video) throws RemoteException;
+	boolean videoNotExist(String video, String owner) throws RemoteException;
 	
-	public void finalizeVideo(String video) throws RemoteException;
+	void finalizeVideoOnCentral(String video, String owner) throws RemoteException, LoginException;
 }

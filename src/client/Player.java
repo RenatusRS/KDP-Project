@@ -33,7 +33,7 @@ public class Player extends JPanel {
 	private String video = null;
 	
 	private void moveSlider(MouseEvent e) {
-		progress.setValue((int) Math.round(((double) progress.getMaximum()) * e.getPoint().x / (progress.getWidth())));
+		progress.setValue((int) Math.round(((double) progress.getMaximum()) * (long) e.getPoint().x / ((long) progress.getWidth())));
 		
 		alignTime(progress.getValue());
 	}
@@ -54,7 +54,6 @@ public class Player extends JPanel {
 	}
 	
 	public Player() {
-		
 		progress.setValue(0);
 		
 		emp.mediaPlayer().controls().setRepeat(true);

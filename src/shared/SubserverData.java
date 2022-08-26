@@ -7,7 +7,7 @@ import java.util.HashMap;
 
 public class SubserverData implements Serializable {
 	public SubserverInterface server;
-	public final HashMap<String, User> users = new HashMap<>();
+	public final HashMap<String, ClientData> users = new HashMap<>();
 	
 	public int id;
 	public long wakeupTime;

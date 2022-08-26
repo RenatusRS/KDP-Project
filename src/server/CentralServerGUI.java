@@ -7,8 +7,8 @@ public class CentralServerGUI extends JFrame {
 	
 	public final JTextArea textArea = new JTextArea();
 	
-	public CentralServerGUI(String host, int port) {
-		setTitle("Central Server [" + host + ":" + port + "]");
+	public CentralServerGUI(int port) {
+		setTitle("Central Server [" + port + "]");
 		setLocation(250, 250);
 		setMinimumSize(new Dimension(500, 400));
 		setDefaultCloseOperation(EXIT_ON_CLOSE);

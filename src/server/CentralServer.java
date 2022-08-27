@@ -68,7 +68,6 @@ public class CentralServer implements CentralServerInterface {
 	private void insert(ClientData client) {
 		ArrayList<SubserverData> subserversList = new ArrayList<>(subservers.values());
 		
-		userLock.lock();
 		if (!subserversList.isEmpty()) {
 			subserversList.sort(Comparator.comparing(a -> a.users.size()));
 			subserversList.get(0).users.put(client.username, client);
@@ -77,7 +76,6 @@ public class CentralServer implements CentralServerInterface {
 			unassignedUsers.put(client.username, client);
 			log.info("Inserted user '" + client.username + "' into unassigned list");
 		}
-		userLock.unlock();
 	}
 	
 	@Override
@@ -125,9 +123,13 @@ public class CentralServer implements CentralServerInterface {
 						log.info("Subserver " + finalServer + " has not responded 3 times, deleting");
 						
 						removalLock.writeLock().lock();
+						userLock.lock();
+						
 						log.info("Assigning " + finalServer + " users a new subserver");
 						Collection<ClientData> clients = subservers.remove(finalServer.id).users.values();
 						for (ClientData client : clients) insert(client);
+						
+						userLock.unlock();
 						removalLock.writeLock().unlock();
 					}
 				} catch (InterruptedException ignored) {
@@ -164,7 +166,10 @@ public class CentralServer implements CentralServerInterface {
 		
 		log.info("User " + client + " registred");
 		
+		userLock.lock();
 		insert(client);
+		userLock.unlock();
+		
 		removalLock.readLock().unlock();
 		
 		return wakeupTime;

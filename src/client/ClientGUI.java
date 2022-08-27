@@ -91,7 +91,7 @@ public class ClientGUI extends JFrame {
 		setTitle("KDP Project");
 		
 		labelConnection.setText("STATUS: Disconnected");
-		labelConnection.setForeground(Color.RED);
+		labelConnection.setForeground(new Color(153, 0, 0));
 		labelError.setText("Disconnected from network, register or sign in again");
 		
 		tabbedPane.removeAll();
@@ -111,7 +111,7 @@ public class ClientGUI extends JFrame {
 		JPanel fieldsPanel = new JPanel(new GridLayout(0, 1));
 		fieldsPanel.setBorder(new EmptyBorder(50, 90, 50, 90));
 		
-		labelError.setForeground(Color.red);
+		labelError.setForeground(new Color(153, 0, 0));
 		
 		textPasswordConfirm.getDocument().addDocumentListener(new DocumentListener() {
 			@Override
@@ -232,9 +232,11 @@ public class ClientGUI extends JFrame {
 					}
 				} catch (RemoteException | NullPointerException | LoginException e) {
 					addNotification("No connection to the server");
+				} finally {
+					uploadButton.setEnabled(true);
 				}
 				
-				uploadButton.setEnabled(true);
+				
 			});
 			
 			uploadButton.setEnabled(false);

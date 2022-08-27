@@ -24,9 +24,9 @@ import java.util.ArrayList;
 import java.util.Date;
 
 public class ClientGUI extends JFrame {
-	final Client owner;
+	private final Client owner;
 	
-	final JTabbedPane tabbedPane = new JTabbedPane();
+	private final JTabbedPane tabbedPane = new JTabbedPane();
 	
 	private final JTextField textUsername = new JTextField(18);
 	private final JTextField textPassword = new JPasswordField();
@@ -44,19 +44,19 @@ public class ClientGUI extends JFrame {
 	
 	final JPanel usersPanel = new JPanel();
 	
-	final JButton uploadButton = new JButton("Upload");
-	final JButton createRoom = new JButton("Create Room");
+	private final JButton uploadButton = new JButton("Upload");
+	private final JButton createRoom = new JButton("Create Room");
 	
-	final JLabel labelError = new JLabel("", JLabel.CENTER);
+	private final JLabel labelError = new JLabel("", JLabel.CENTER);
 	
 	private JFileChooser fileChooser;
 	
 	Thread syncThread;
 	Thread uploadThread;
 	
-	final JPanel loginPanel = loginPanel();
-	final JPanel browsePanel = browsePanel();
-	final JPanel watchPanel = watchPanel();
+	private final JPanel loginPanel = loginPanel();
+	private final JPanel browsePanel = browsePanel();
+	private final JPanel watchPanel = watchPanel();
 	
 	public ClientGUI(Client owner) {
 		this.owner = owner;
@@ -76,14 +76,18 @@ public class ClientGUI extends JFrame {
 		setVisible(true);
 	}
 	
-	public void start() {
+	public void mainView() {
 		tabbedPane.removeAll();
 		
 		tabbedPane.add(browsePanel, "Browse");
 		tabbedPane.add(watchPanel, "Watch");
+		
+		Room localRoom = new Room("Local Room", owner.username, null);
+		localRoom.setID(0);
+		rooms.addItem(localRoom);
 	}
 	
-	public void restart() {
+	public void loginView() {
 		setTitle("KDP Project");
 		
 		labelConnection.setText("STATUS: Disconnected");
@@ -209,7 +213,7 @@ public class ClientGUI extends JFrame {
 				if (file == null) return;
 				
 				try {
-					if (!owner.subserver.videoNotExist(file.getName(), owner.username)) {
+					if (!owner.subserver.reserveVideo(file.getName(), owner.username)) {
 						addNotification("Video '" + file.getName() + "' already exists");
 						return;
 					}
@@ -218,7 +222,7 @@ public class ClientGUI extends JFrame {
 						int readBytes;
 						byte[] b = new byte[1024 * 1024 * 32];
 						
-						while (!uploadThread.isInterrupted() && (readBytes = is.read(b)) != -1) owner.subserver.uplaodVideoDataToCentral(file.getName(), new Data(b, readBytes), owner.username);
+						while (!uploadThread.isInterrupted() && (readBytes = is.read(b)) != -1) owner.subserver.uploadVideoDataToCentral(file.getName(), new Data(b, readBytes), owner.username);
 						
 						if (!Thread.interrupted()) owner.subserver.finalizeVideo(file.getName(), owner.username);
 					} catch (IOException e) {
@@ -226,11 +230,11 @@ public class ClientGUI extends JFrame {
 					} catch (LoginException e) {
 						addNotification(e.getMessage());
 					}
-				} catch (RemoteException | NullPointerException e) {
-					addNotification("ERROR: No connection to the server");
-				} finally {
-					uploadButton.setEnabled(true);
+				} catch (RemoteException | NullPointerException | LoginException e) {
+					addNotification("No connection to the server");
 				}
+				
+				uploadButton.setEnabled(true);
 			});
 			
 			uploadButton.setEnabled(false);
@@ -281,63 +285,63 @@ public class ClientGUI extends JFrame {
 			} else {
 				try {
 					room = owner.subserver.getRoomData(room.getID());
-				} catch (RemoteException ex) {
-					ex.printStackTrace();
-				}
-				
-				play(room.video);
-				player.pause(room.getPaused());
-				player.seek(room.getTime());
-				
-				createRoom.setEnabled(false);
-				
-				Room finalRoom = room;
-				if (finalRoom.owner.equals(owner.username)) syncThread = new Thread(() -> {
-					try {
-						while (!syncThread.isInterrupted()) {
-							try {
-								owner.subserver.setRoomData(finalRoom.getID(), player.progress.getValue(), player.getPaused());
-							} catch (RemoteException e1) {
-								if (!finalRoom.owner.equals(owner.username) && !player.getPaused()) player.pause(true);
-								addNotification("Lost connection to the server, stopping room updates");
-								
-								Thread.sleep(1500);
-							}
-							
-							Thread.sleep(250);
-						}
-					} catch (InterruptedException ignored) {
-					}
-				});
-				else syncThread = new Thread(() -> {
-					Room temp;
-					try {
-						while (!syncThread.isInterrupted()) {
-							try {
-								temp = owner.subserver.getRoomData(finalRoom.getID());
-								
-								System.out.println(temp.getTime() + " - " + player.getTime() + " = " + Math.abs(temp.getTime() - player.getTime()));
-								if (temp.getPaused()) {
-									player.pause(true);
-									if (temp.getTime() != player.getTime()) player.seek(temp.getTime());
-								} else {
-									if (player.getPaused() || Math.abs(temp.getTime() - player.getTime()) > 1000) player.seek(temp.getTime());
-									player.pause(false);
+					
+					
+					playVideo(room.video);
+					player.pause(room.getPaused());
+					player.seek(room.getTime());
+					
+					createRoom.setEnabled(false);
+					
+					Room finalRoom = room;
+					if (finalRoom.owner.equals(owner.username)) syncThread = new Thread(() -> {
+						try {
+							while (!syncThread.isInterrupted()) {
+								try {
+									owner.subserver.setRoomData(finalRoom.getID(), player.progress.getValue(), player.getPaused());
+								} catch (RemoteException | LoginException e1) {
+									addNotification("Couldn't update room, no connection to the server, retrying");
+									
+									Thread.sleep(1500);
 								}
 								
 								Thread.sleep(250);
-							} catch (RemoteException e1) {
-								if (!finalRoom.owner.equals(owner.username) && !player.getPaused()) player.pause(true);
-								addNotification("Lost connection to the server, stopping room updates");
-								
-								Thread.sleep(1500);
 							}
+						} catch (InterruptedException | ArrayIndexOutOfBoundsException ignored) {
 						}
-					} catch (InterruptedException ignored) {
-					}
-				});
-				
-				syncThread.start();
+					});
+					else syncThread = new Thread(() -> {
+						Room temp;
+						try {
+							while (!syncThread.isInterrupted()) {
+								try {
+									temp = owner.subserver.getRoomData(finalRoom.getID());
+									
+									System.out.println(temp.getTime() + " - " + player.getTime() + " = " + Math.abs(temp.getTime() - player.getTime()));
+									if (temp.getPaused()) {
+										player.pause(true);
+										if (temp.getTime() != player.getTime()) player.seek(temp.getTime());
+									} else {
+										if (player.getPaused() || Math.abs(temp.getTime() - player.getTime()) > 1000) player.seek(temp.getTime());
+										player.pause(false);
+									}
+									
+									Thread.sleep(250);
+								} catch (RemoteException | LoginException e1) {
+									player.pause(true);
+									addNotification("Couldn't refresh room, no connection to the server, retrying");
+									
+									Thread.sleep(1500);
+								}
+							}
+						} catch (InterruptedException | ArrayIndexOutOfBoundsException ignored) {
+						}
+					});
+					
+					syncThread.start();
+				} catch (RemoteException | LoginException ex) {
+					addNotification("Couldn't get selected room data, no connecton to the server");
+				}
 			}
 		});
 		
@@ -363,7 +367,9 @@ public class ClientGUI extends JFrame {
 			try {
 				owner.subserver.createRoom(new Room(player.getVideo(), owner.username, viewers));
 			} catch (RemoteException e) {
-				e.printStackTrace();
+				addNotification("Couldn't create room, no connection to the server");
+			} catch (LoginException e) {
+				addNotification(e.getMessage());
 			}
 		});
 		
@@ -388,7 +394,7 @@ public class ClientGUI extends JFrame {
 	public void addRoom(Room room) {
 		rooms.addItem(room);
 		
-		if (!owner.username.equals(room.owner)) addNotification("ClientData '" + room.owner + "' has added you to their room playing '" + room.video + "'");
+		if (!owner.username.equals(room.owner)) addNotification("User '" + room.owner + "' has added you to their room playing '" + room.video + "'");
 		else rooms.setSelectedItem(room);
 	}
 	
@@ -422,19 +428,13 @@ public class ClientGUI extends JFrame {
 		
 		video.addMouseListener(new MouseAdapter() {
 			public void mouseClicked(MouseEvent e) {
-				if (rooms.getItemCount() == 0) {
-					Room localRoom = new Room("Local Room", owner.username, null);
-					localRoom.setID(0);
-					addRoom(localRoom);
-				}
-				
 				if (syncThread != null) syncThread.interrupt();
 				createRoom.setEnabled(true);
 				player.setControls(true);
 				rooms.setSelectedIndex(0);
 				tabbedPane.setSelectedIndex(1);
 				
-				play(title);
+				playVideo(title);
 			}
 		});
 		
@@ -450,7 +450,7 @@ public class ClientGUI extends JFrame {
 		revalidate();
 	}
 	
-	public void play(String title) {
+	public void playVideo(String title) {
 		player.play("uploads/client/" + owner.username + "/" + title);
 	}
 }

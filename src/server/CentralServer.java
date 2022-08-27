@@ -1,8 +1,13 @@
 package server;
 
-import shared.*;
+import shared.Data;
+import shared.Logger;
+import shared.Room;
+import shared.Video;
 import shared.interfaces.CentralServerInterface;
 import shared.interfaces.SubserverInterface;
+import shared.remote.ClientData;
+import shared.remote.SubserverData;
 
 import javax.security.auth.login.LoginException;
 import java.io.IOException;
@@ -14,11 +19,14 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
+import java.util.Comparator;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class CentralServer implements CentralServerInterface {
@@ -28,17 +36,18 @@ public class CentralServer implements CentralServerInterface {
 	
 	private final long wakeupTime = System.currentTimeMillis();
 	
-	private final HashMap<String, ClientData> unassignedUsers = new HashMap<>();
-	private final ReadWriteLock usersLock = new ReentrantReadWriteLock(true);
+	private final ConcurrentHashMap<String, ClientData> unassignedUsers = new ConcurrentHashMap<>();
+	private final Lock userLock = new ReentrantLock(true);
 	
-	private final ArrayList<Room> rooms = new ArrayList<>();
+	private final CopyOnWriteArrayList<Room> rooms = new CopyOnWriteArrayList<>();
 	private final AtomicInteger roomID = new AtomicInteger(1);
 	
-	private final HashMap<Integer, SubserverData> subservers = new HashMap<>();
+	private final ConcurrentHashMap<Integer, SubserverData> subservers = new ConcurrentHashMap<>();
 	private final AtomicInteger subserverID = new AtomicInteger(0);
-	private final ReadWriteLock subserversLock = new ReentrantReadWriteLock(true);
+	private final ReadWriteLock removalLock = new ReentrantReadWriteLock(true);
 	
-	private final HashMap<String, Video> videos = new HashMap<>();
+	private final ConcurrentHashMap<String, Video> videos = new ConcurrentHashMap<>();
+	
 	private final Set<String> requestedVideos = ConcurrentHashMap.newKeySet();
 	
 	private final Logger log;
@@ -50,145 +59,154 @@ public class CentralServer implements CentralServerInterface {
 		
 		try {
 			LocateRegistry.createRegistry(port).rebind("/Central", UnicastRemoteObject.exportObject(this, 0));
+			log.info("Server started on " + port + " with ID " + wakeupTime);
 		} catch (RemoteException e) {
 			e.printStackTrace();
 		}
-		
-		log.info("Server started on " + port + " with ID " + wakeupTime);
 	}
 	
-	@Override
-	public synchronized void addSubserver(SubserverData server) throws RemoteException {
-		if (server.wakeupTime != wakeupTime) {
-			server.wakeupTime = wakeupTime;
-			
-			server.id = subserverID.getAndIncrement();
-			
-			server.server.clearData();
-			subservers.put(server.id, server);
-			
-			server.server.setId(server.id, server.wakeupTime);
-			
-			log.info(server + " Added subserver");
+	private void insert(ClientData client) {
+		ArrayList<SubserverData> subserversList = new ArrayList<>(subservers.values());
+		
+		userLock.lock();
+		if (!subserversList.isEmpty()) {
+			subserversList.sort(Comparator.comparing(a -> a.users.size()));
+			subserversList.get(0).users.put(client.username, client);
+			log.info("Inserted user '" + client.username + "' into server " + subserversList.get(0).id);
 		} else {
-			SubserverData temp = subservers.get(server.id);
-			temp.thread.interrupt();
-			temp.server = server.server;
-			
-			for (ClientData client : temp.users.values()) temp.server.assignUser(client);
-			
-			server = temp;
-			
-			log.info(server + " Reconnected with a subserver");
+			unassignedUsers.put(client.username, client);
+			log.info("Inserted user '" + client.username + "' into unassigned list");
 		}
-		
-		SubserverData finalServer = server;
-		server.thread = new Thread(() -> {
-			int period = 16000;
-			int count = 1;
-			
-			try {
-				while (count <= 3) {
-					log.info("Contacting subserver " + finalServer + " in " + period / 1000 + " seconds, attempt [" + count + "/3]");
-					Thread.sleep(period);
-					
-					try {
-						finalServer.server.status();
-						period = 16000;
-						count = 1;
-					} catch (RemoteException e) {
-						period /= 2;
-						count++;
-					}
-				}
-				
-				log.info("Subserver " + finalServer + " has not responded 3 times, deleting");
-				
-				subserversLock.writeLock().lock();
-				Collection<ClientData> clients = subservers.remove(finalServer.id).users.values();
-				subserversLock.writeLock().unlock();
-				
-				for (ClientData client : clients) insert(client);
-				
-			} catch (InterruptedException ignored) {
-			} catch (RemoteException e) {
-				e.printStackTrace();
-			}
-		});
-		
-		server.thread.start();
-		
-		if (unassignedUsers.isEmpty()) return;
-		
-		usersLock.readLock().lock();
-		for (ClientData client : unassignedUsers.values()) {
-			server.server.assignUser(client);
-			server.users.put(client.username, client);
-			
-			log.info(server + " Assigned client " + client);
-		}
-		
-		unassignedUsers.clear();
-		usersLock.readLock().unlock();
+		userLock.unlock();
 	}
 	
 	@Override
-	public synchronized long register(ClientData client) throws RemoteException, LoginException {
-		if (unassignedUsers.containsKey(client.username)) log.error(" Username " + client + " is already taken", "Username is taken!");
+	public synchronized void addSubserver(SubserverData server) {
+		try {
+			if (server.wakeupTime != wakeupTime) {
+				server.id = subserverID.getAndIncrement();
+				
+				server.server.setId(server.id, wakeupTime);
+				
+				subservers.put(server.id, server);
+				
+				log.info(server + " Added subserver");
+			} else {
+				SubserverData temp = subservers.get(server.id);
+				temp.thread.interrupt();
+				temp.server = server.server;
+				
+				server = temp;
+				
+				log.info(server + " Reconnected with a subserver");
+			}
+			
+			SubserverData finalServer = server;
+			server.thread = new Thread(() -> {
+				int period = 16000;
+				int count = 1;
+				
+				try {
+					while (!finalServer.thread.isInterrupted() && count <= 3) {
+						log.info("Contacting subserver " + finalServer + " in " + period / 1000 + " seconds, attempt [" + count + "/3]");
+						Thread.sleep(period);
+						
+						try {
+							finalServer.server.status();
+							period = 16000;
+							count = 1;
+						} catch (RemoteException e) {
+							period /= 2;
+							count++;
+						}
+					}
+					
+					if (!Thread.interrupted()) {
+						log.info("Subserver " + finalServer + " has not responded 3 times, deleting");
+						
+						removalLock.writeLock().lock();
+						log.info("Assigning " + finalServer + " users a new subserver");
+						Collection<ClientData> clients = subservers.remove(finalServer.id).users.values();
+						for (ClientData client : clients) insert(client);
+						removalLock.writeLock().unlock();
+					}
+				} catch (InterruptedException ignored) {
+				}
+			});
+			
+			server.thread.start();
+			
+			userLock.lock();
+			if (!unassignedUsers.isEmpty()) {
+				for (ClientData user : unassignedUsers.values()) insert(user);
+				unassignedUsers.clear();
+			}
+			userLock.unlock();
+		} catch (RemoteException e) {
+			log.info("Lost connection to subserver during its insertion");
+		}
+	}
+	
+	@Override
+	public synchronized long register(ClientData client) throws LoginException {
+		removalLock.readLock().lock();
+		if (unassignedUsers.containsKey(client.username)) {
+			removalLock.readLock().unlock();
+			log.error("Username " + client + " is already taken", "Username is taken!");
+		}
 		
 		for (SubserverData server : subservers.values())
-			if (server.users.containsKey(client.username)) log.error(" Username " + client + " is already taken", "Username is taken!");
+			if (server.users.containsKey(client.username)) {
+				removalLock.readLock().unlock();
+				log.error("Username " + client + " is already taken", "Username is taken!");
+			}
 		
-		log.info(" ClientData " + client + " registred");
+		
+		log.info("User " + client + " registred");
 		
 		insert(client);
+		removalLock.readLock().unlock();
 		
 		return wakeupTime;
 	}
 	
-	private void insert(ClientData client) throws RemoteException {
-		int min = Integer.MAX_VALUE;
-		SubserverData leastPopulated = null;
-		
-		for (SubserverData server : subservers.values()) {
-			if (server.users.size() < min) {
-				min = server.users.size();
-				leastPopulated = server;
-			}
-		}
-		
-		if (leastPopulated == null) {
-			unassignedUsers.put(client.username, client);
-			log.info(" ClientData " + client + " put in unassigned list");
-		} else {
-			leastPopulated.users.put(client.username, client);
-			leastPopulated.server.assignUser(client);
-			log.info(" ClientData " + client + " registred put in server " + leastPopulated);
-		}
-	}
-	
 	@Override
-	public long login(ClientData client) throws RemoteException, LoginException {
+	public long login(ClientData client) throws LoginException {
+		removalLock.readLock().lock();
 		for (SubserverData server : subservers.values()) {
 			if (server.users.containsKey(client.username)) {
-				if (!server.users.get(client.username).password.equals(client.password))
-					log.error(" Bad password for " + client + ", attempted: '" + client.password + "', real: " + server.users.get(client.username), "Wrong password!");
+				if (!server.users.get(client.username).password.equals(client.password)) {
+					removalLock.readLock().unlock();
+					log.error("Bad password for " + client + ", attempted: '" + client.password + "', real: " + server.users.get(client.username), "Wrong password!");
+				}
 				
 				server.users.put(client.username, client);
-				server.server.assignUser(client);
-				log.info(" ClientData " + client + " logged in to server " + server);
+				log.info("User " + client + " logged in to server " + server);
+				
+				removalLock.readLock().unlock();
 				return wakeupTime;
 			}
 		}
 		
-		if (unassignedUsers.containsKey(client.username)) log.info(" ClientData " + client + " logged in, but no subserver to assign to yet");
-		else log.error("ClientData " + client + " doesn't exist", "ClientData doesn't exist!");
+		if (unassignedUsers.containsKey(client.username)) {
+			if (!unassignedUsers.get(client.username).password.equals(client.password)) {
+				removalLock.readLock().unlock();
+				log.error("Bad password for " + client + ", attempted: '" + client.password + "', real: " + unassignedUsers.get(client.username), "Wrong password!");
+			}
+			
+			
+			log.info("User " + client + " logged in, but no subserver to assign to yet");
+		} else {
+			removalLock.readLock().unlock();
+			log.error("User " + client + " doesn't exist", "User doesn't exist!");
+		}
+		removalLock.readLock().unlock();
 		
 		return wakeupTime;
 	}
 	
 	@Override
-	public boolean videoNotExist(String video, String owner) throws RemoteException {
+	public boolean reserveVideo(String video, String owner) {
 		log.info("Recieved request to upload video '" + video + "'");
 		
 		Video videoFile = videos.get(video);
@@ -211,7 +229,7 @@ public class CentralServer implements CentralServerInterface {
 	}
 	
 	@Override
-	public void uploadVideoDataToCentral(String video, Data data, String username) throws RemoteException, LoginException {
+	public void uploadVideoDataToCentral(String video, Data data, String username) throws LoginException {
 		log.info("Recieved request to upload data '" + video + "' by user '" + username + "'");
 		
 		synchronized (video.intern()) {
@@ -225,7 +243,7 @@ public class CentralServer implements CentralServerInterface {
 	}
 	
 	@Override
-	public void finalizeVideoOnCentral(String video, String username) throws RemoteException, LoginException {
+	public void finalizeVideoOnCentral(String video, String username) throws LoginException {
 		log.info("Recieved request to finalize '" + video + "' by user '" + username + "'");
 		
 		synchronized (video.intern()) {
@@ -239,19 +257,19 @@ public class CentralServer implements CentralServerInterface {
 	}
 	
 	@Override
-	public void requestVideoFromCentral(String video, int subserverID) throws RemoteException, LoginException {
+	public void requestVideoFromCentral(String video, int subserverID) throws LoginException {
 		log.info("Subserver " + subserverID + " requested video '" + video + "'");
 		
 		if (requestedVideos.contains(video + subserverID))
 			log.error("Central server already sending video '" + video + "' to subserver " + subserverID, "Video '" + video + "' is already being sent by the central server");
+		
+		requestedVideos.add(video + subserverID);
 		
 		(new Thread(() -> {
 			Video videoFile = videos.get(video);
 			SubserverInterface subserver = subservers.get(subserverID).server;
 			
 			try (InputStream is = videoFile.read()) {
-				requestedVideos.add(video + subserverID);
-				
 				int readBytes;
 				byte[] b = new byte[1024 * 1024 * 32];
 				
@@ -266,7 +284,7 @@ public class CentralServer implements CentralServerInterface {
 	}
 	
 	@Override
-	public Room getRoomData(int roomID) throws RemoteException {
+	public Room getRoomData(int roomID) {
 		log.info("Sending updated room data for room " + roomID);
 		
 		Room room = rooms.get(roomID - 1);
@@ -280,14 +298,15 @@ public class CentralServer implements CentralServerInterface {
 	}
 	
 	@Override
-	public void setRoomData(int room, long time, boolean paused) throws RemoteException {
+	public void setRoomData(int room, long time, boolean paused) {
 		log.info("Receiving updated room data for room " + room + " [" + time + ", " + paused + "]");
 		rooms.get(room - 1).sync(time, paused);
 	}
 	
 	@Override
-	public synchronized void createRoom(Room room) throws RemoteException {
+	public synchronized void createRoom(Room room) {
 		room.setID(roomID.getAndIncrement());
+		
 		rooms.add(room);
 		
 		log.info("Received request for room creation " + room);
@@ -295,14 +314,21 @@ public class CentralServer implements CentralServerInterface {
 	
 	@Override
 	public ArrayList<String> getUsers() {
-		ArrayList<String> allUsers = new ArrayList<>();
+		ArrayList<String> allUsers = new ArrayList<>(unassignedUsers.keySet());
 		
-		if (!unassignedUsers.isEmpty()) allUsers.addAll(unassignedUsers.keySet());
-		else for (SubserverData server : subservers.values()) allUsers.addAll(server.users.keySet());
+		for (SubserverData server : subservers.values()) allUsers.addAll(server.users.keySet());
 		
 		log.info("Received request for all user names " + allUsers);
 		
 		return allUsers;
+	}
+	
+	@Override
+	public ArrayList<ClientData> getUsers(int id) {
+		ArrayList<ClientData> list = new ArrayList<>(subservers.get(id).users.values());
+		
+		log.info("Subserver '" + id + "' requested all of its users " + list);
+		return list;
 	}
 	
 	@Override
@@ -318,6 +344,7 @@ public class CentralServer implements CentralServerInterface {
 	@Override
 	public ArrayList<String> getAllVideoNames() {
 		ArrayList<String> names = new ArrayList<>();
+		
 		for (Video video : videos.values()) if (video.finished) names.add(video.name);
 		
 		log.info("Received request for all video names " + names);

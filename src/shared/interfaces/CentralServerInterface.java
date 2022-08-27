@@ -1,9 +1,9 @@
 package shared.interfaces;
 
-import shared.ClientData;
 import shared.Data;
 import shared.Room;
-import shared.SubserverData;
+import shared.remote.ClientData;
+import shared.remote.SubserverData;
 
 import javax.security.auth.login.LoginException;
 import java.rmi.NotBoundException;
@@ -30,11 +30,13 @@ public interface CentralServerInterface extends Remote {
 	
 	ArrayList<String> getUsers() throws RemoteException;
 	
+	ArrayList<ClientData> getUsers(int id) throws RemoteException;
+	
 	ArrayList<String> getAllVideoNames() throws RemoteException;
 	
 	void requestVideoFromCentral(String video, int subserver) throws RemoteException, LoginException;
 	
-	boolean videoNotExist(String video, String owner) throws RemoteException;
+	boolean reserveVideo(String video, String owner) throws RemoteException;
 	
 	void finalizeVideoOnCentral(String video, String owner) throws RemoteException, LoginException;
 }

@@ -1,13 +1,13 @@
-package shared;
+package shared.remote;
 
 import shared.interfaces.SubserverInterface;
 
 import java.io.Serializable;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class SubserverData implements Serializable {
 	public SubserverInterface server;
-	public final HashMap<String, ClientData> users = new HashMap<>();
+	public final ConcurrentHashMap<String, ClientData> users = new ConcurrentHashMap<>();
 	
 	public int id;
 	public long wakeupTime;

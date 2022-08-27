@@ -143,13 +143,13 @@ public class Player extends JPanel {
 		emp.mediaPlayer().controls().setPause(state);
 	}
 	
-	public void setControls(boolean controls) {
-		progress.setEnabled(controls);
-		this.controls = controls;
+	public void setControls(boolean state) {
+		progress.setEnabled(state);
+		this.controls = state;
 	}
 	
-	public void seek(long time) {
-		emp.mediaPlayer().controls().setTime(time);
+	public void seek(long millis) {
+		emp.mediaPlayer().controls().setTime(millis);
 		alignSlider();
 	}
 	

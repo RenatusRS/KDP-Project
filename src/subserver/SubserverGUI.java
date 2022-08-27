@@ -7,8 +7,8 @@ public class SubserverGUI extends JFrame {
 	
 	public final JTextArea textArea = new JTextArea();
 	
-	public SubserverGUI(long id) {
-		setTitle("Subserver [" + id + "]");
+	public SubserverGUI() {
+		setTitle("Subserver");
 		setLocation(250, 250);
 		setMinimumSize(new Dimension(500, 400));
 		setDefaultCloseOperation(EXIT_ON_CLOSE);

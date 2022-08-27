@@ -1,9 +1,13 @@
 package client;
 
-import shared.*;
+import shared.Data;
+import shared.Room;
+import shared.Utils;
+import shared.Video;
 import shared.interfaces.CentralServerInterface;
 import shared.interfaces.ClientInterface;
 import shared.interfaces.SubserverInterface;
+import shared.remote.ClientData;
 
 import javax.security.auth.login.LoginException;
 import javax.swing.*;
@@ -41,10 +45,6 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 		this.centralPort = centralPort;
 	}
 	
-	
-	// TODO
-	//  sinhronizuj centralni server,
-	//  obradi remote exceptione
 	public void loggedIn(String username, String password, boolean registration) throws RemoteException, LoginException, NotBoundException {
 		CentralServerInterface central = (CentralServerInterface) LocateRegistry.getRegistry(centralHost, centralPort).lookup("/Central");
 		
@@ -56,7 +56,7 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 		
 		gui.setTitle("KDP Project [" + username + ", " + wakeupTime + "]");
 		
-		gui.start();
+		gui.mainView();
 		
 		(new Thread(() -> {
 			int counter = 0;
@@ -85,34 +85,36 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 					gui.labelConnection.setForeground(Color.RED);
 					
 					Utils.sleep(10000);
+				} catch (LoginException e) {
+					gui.addNotification(e.getMessage());
 				}
 			}
 		})).start();
 	}
 	
-	public void reset() {
+	private void reset() {
 		wakeupTime = 0;
 		
 		if (gui.syncThread != null) gui.syncThread.interrupt();
 		if (gui.uploadThread != null) gui.uploadThread.interrupt();
 		gui.player.pause(true);
-		gui.play("");
+		gui.playVideo("");
 		
 		Utils.cleanup("uploads/client/" + username + "/");
 		
 		videos.clear();
 		username = null;
 		
-		gui.restart();
+		gui.loginView();
 	}
 	
-	public void syncVideos() throws RemoteException {
+	private void syncVideos() throws RemoteException {
 		ArrayList<String> videoNames = subserver.getAllVideoNames();
 		for (Video video : videos.values()) if (video.finished) videoNames.remove(video.name);
 		
 		for (String videoName : videoNames) {
 			try {
-				subserver.requestVideoFromSubserver(videoName, username);
+				subserver.requestVideoFromSubserver(videoName, new ClientData(this, username, null));
 				Files.deleteIfExists(Path.of("uploads/client/" + username + "/" + videoName));
 				videos.put(videoName, new Video(videoName, null));
 			} catch (LoginException e) {
@@ -123,49 +125,33 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 		}
 	}
 	
-	public void syncUsers() throws RemoteException {
+	private void syncUsers() throws RemoteException, LoginException {
 		ArrayList<String> users = subserver.getUsers();
 		
 		for (Component user : gui.usersPanel.getComponents()) if (user instanceof JCheckBox) users.remove(((JCheckBox) user).getText());
-		for (String user : users) if (!user.equals(username)) addUser(user);
+		for (String user : users) if (!user.equals(username)) gui.addUser(user);
 	}
 	
-	public void syncRooms() throws RemoteException {
-		for (Room room : subserver.getRooms(username)) if (((DefaultComboBoxModel<?>) gui.rooms.getModel()).getIndexOf(room) == -1) addRoom(room);
+	private void syncRooms() throws RemoteException, LoginException {
+		for (Room room : subserver.getRooms(username)) if (((DefaultComboBoxModel<?>) gui.rooms.getModel()).getIndexOf(room) == -1) gui.addRoom(room);
 	}
 	
 	@Override
-	public void uploadSubserverToClient(String video, Data data) throws RemoteException {
+	public void uploadSubserverToClient(String video, Data data) {
 		videos.get(video).write(data);
 	}
 	
 	@Override
-	public void finalizeVideo(String video) throws RemoteException {
+	public void finalizeVideo(String video) {
 		videos.get(video).finished = true;
 		gui.addNotification("Downloaded video '" + video + "'");
 		gui.addVideo(video);
 	}
 	
 	@Override
-	public void addRoom(Room room) throws RemoteException {
-		if (gui.rooms.getItemCount() == 0) {
-			Room localRoom = new Room("Local Room", username, null);
-			localRoom.setID(0);
-			gui.rooms.addItem(localRoom);
-		}
-		
-		gui.addRoom(room);
-	}
-	
-	@Override
-	public synchronized void addUser(String user) throws RemoteException {
-		gui.addUser(user);
-	}
-	
-	@Override
-	public synchronized void assignSubserver(SubserverInterface subserver, String username, long wakeupTime) throws RemoteException, LoginException {
+	public synchronized void assignSubserver(SubserverInterface subserver, String username, long wakeupTime) throws LoginException {
 		if (this.wakeupTime != wakeupTime) throw new LoginException("The client " + this.username + " is from a different central server");
-		if (!username.equals(this.username)) throw new LoginException("This client is from user " + this.username + "now");
+		if (!username.equals(this.username)) throw new LoginException("This client is from user " + this.username + " now");
 		
 		this.subserver = subserver;
 	}

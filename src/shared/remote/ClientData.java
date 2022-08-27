@@ -1,4 +1,4 @@
-package shared;
+package shared.remote;
 
 import shared.interfaces.ClientInterface;
 

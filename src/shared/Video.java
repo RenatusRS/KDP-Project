@@ -10,7 +10,7 @@ public class Video {
 	public final String name;
 	public final String owner;
 	public boolean finished = false;
-	public long lastModified;
+	private long lastModified;
 	
 	public Video(String name, String owner) {
 		this.name = name;
@@ -42,6 +42,10 @@ public class Video {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+	}
+	
+	public long getLastModified() {
+		return lastModified;
 	}
 	
 	public FileInputStream read() throws FileNotFoundException {

@@ -35,6 +35,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 	
 	private final HashMap<String, Video> videos = new HashMap<>();
 	private final ConcurrentHashMap<String, Thread> requestedVideos = new ConcurrentHashMap<>();
+	private final HashMap<String, Thread> threads = new HashMap<>();
 	
 	public Subserver(String centralHost, int centralPort, boolean nogui) throws RemoteException {
 		log = new Logger(nogui ? System.out::print : (new SubserverGUI())::print);
@@ -95,15 +96,25 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 		ArrayList<ClientData> users = server.getUsers(id);
 		
 		for (ClientData client : users) {
-			log.info("User '" + client.username + "' has been assigned");
-			
-			try {
-				client.client.assignSubserver(this, client.username, wakeupTime);
-			} catch (RemoteException e) {
-				log.info("Failed connecting to user " + client.username);
-			} catch (LoginException e) {
-				log.info(e.getMessage());
+			if (threads.containsKey(client.username) && threads.get(client.username).isAlive()) {
+				log.info("Connection attempt to '" + client.username + "' is still running, skipping");
+				continue;
 			}
+			
+			Thread thread = new Thread(() -> {
+				try {
+					log.info("Trying to assign to user '" + client.username + "'");
+					client.client.assignSubserver(this, client.username, wakeupTime);
+					log.info("User '" + client.username + "' has been assigned");
+				} catch (RemoteException e) {
+					log.info("Failed connecting to user " + client.username);
+				} catch (LoginException e) {
+					log.info(e.getMessage());
+				}
+			});
+			
+			threads.put(client.username, thread);
+			thread.start();
 		}
 	}
 	

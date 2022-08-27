@@ -234,9 +234,9 @@ public class ClientGUI extends JFrame {
 					}
 				} catch (RemoteException | NullPointerException | LoginException e) {
 					addNotification("No connection to the server");
+				} finally {
+					uploadButton.setEnabled(true);
 				}
-				
-				uploadButton.setEnabled(true);
 			});
 			
 			uploadButton.setEnabled(false);

@@ -130,7 +130,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 	}
 	
 	@Override
-	public void uploadVideoDataToCentral(String video, Data data, String owner) throws LoginException {
+	public void uploadVideoDataToCentral(String video, Data data, String owner) throws RemoteException, LoginException {
 		log.info("Uploading data for video '" + video + "' by user '" + owner + "'");
 		try {
 			server.uploadVideoDataToCentral(video, data, owner);

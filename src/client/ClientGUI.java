@@ -210,11 +210,13 @@ public class ClientGUI extends JFrame {
 			
 			uploadThread = new Thread(() -> {
 				File file = fileChooser.getSelectedFile();
-				if (file == null) return;
 				
 				try {
+					
+					if (file == null) return;
 					if (!owner.subserver.reserveVideo(file.getName(), owner.username)) {
 						addNotification("Video '" + file.getName() + "' already exists");
+						uploadButton.setEnabled(true);
 						return;
 					}
 					
@@ -232,11 +234,9 @@ public class ClientGUI extends JFrame {
 					}
 				} catch (RemoteException | NullPointerException | LoginException e) {
 					addNotification("No connection to the server");
-				} finally {
-					uploadButton.setEnabled(true);
 				}
 				
-				
+				uploadButton.setEnabled(true);
 			});
 			
 			uploadButton.setEnabled(false);

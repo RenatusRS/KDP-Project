@@ -45,6 +45,7 @@ public class CentralServer implements CentralServerInterface {
 	private final ConcurrentHashMap<Integer, SubserverData> subservers = new ConcurrentHashMap<>();
 	private final AtomicInteger subserverID = new AtomicInteger(0);
 	private final ReadWriteLock removalLock = new ReentrantReadWriteLock(true);
+	private final Lock reconnectLock = new ReentrantLock(true);
 	
 	private final ConcurrentHashMap<String, Video> videos = new ConcurrentHashMap<>();
 	
@@ -81,7 +82,9 @@ public class CentralServer implements CentralServerInterface {
 	@Override
 	public synchronized void addSubserver(SubserverData server) {
 		try {
-			if (server.wakeupTime != wakeupTime) {
+			reconnectLock.lock();
+			SubserverData temp = subservers.get(server.id);
+			if (temp == null || server.wakeupTime != wakeupTime) {
 				server.id = subserverID.getAndIncrement();
 				
 				server.server.setId(server.id, wakeupTime);
@@ -90,7 +93,6 @@ public class CentralServer implements CentralServerInterface {
 				
 				log.info(server + " Added subserver");
 			} else {
-				SubserverData temp = subservers.get(server.id);
 				temp.thread.interrupt();
 				temp.server = server.server;
 				
@@ -98,6 +100,7 @@ public class CentralServer implements CentralServerInterface {
 				
 				log.info(server + " Reconnected with a subserver");
 			}
+			reconnectLock.unlock();
 			
 			SubserverData finalServer = server;
 			server.thread = new Thread(() -> {
@@ -119,6 +122,7 @@ public class CentralServer implements CentralServerInterface {
 						}
 					}
 					
+					reconnectLock.lock();
 					if (!Thread.interrupted()) {
 						log.info("Subserver " + finalServer + " has not responded 3 times, deleting");
 						
@@ -132,6 +136,8 @@ public class CentralServer implements CentralServerInterface {
 						userLock.unlock();
 						removalLock.writeLock().unlock();
 					}
+					reconnectLock.unlock();
+					
 				} catch (InterruptedException ignored) {
 				}
 			});

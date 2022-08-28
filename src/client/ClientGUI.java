@@ -204,8 +204,8 @@ public class ClientGUI extends JFrame {
 		
 		uploadButton.addActionListener((ae) -> {
 			if (uploadThread != null && uploadThread.isAlive()) {
-				addNotification("Previous video sill uploading!");
-				return;
+				addNotification("Stopping previous upload and starting a new one!");
+				uploadThread.interrupt();
 			}
 			
 			uploadThread = new Thread(() -> {
@@ -216,17 +216,24 @@ public class ClientGUI extends JFrame {
 					if (file == null) return;
 					if (!owner.subserver.reserveVideo(file.getName(), owner.username)) {
 						addNotification("Video '" + file.getName() + "' already exists");
-						uploadButton.setEnabled(true);
 						return;
 					}
 					
+					long total = file.length();
+					
 					try (InputStream is = new FileInputStream(file)) {
 						int readBytes;
-						byte[] b = new byte[1024 * 1024 * 32];
+						byte[] b = new byte[1024 * 1024 * 16];
 						
-						while (!uploadThread.isInterrupted() && (readBytes = is.read(b)) != -1) owner.subserver.uploadVideoDataToCentral(file.getName(), new Data(b, readBytes), owner.username);
+						while (!uploadThread.isInterrupted() && (readBytes = is.read(b)) != -1) {
+							total -= readBytes;
+							System.out.println(total);
+							owner.subserver.uploadVideoDataToCentral(file.getName(), new Data(b, readBytes), owner.username);
+						}
+						System.out.println("im out");
 						
 						if (!Thread.interrupted()) owner.subserver.finalizeVideo(file.getName(), owner.username);
+						else System.out.println(file.getName() + " got interrupted.");
 					} catch (IOException e) {
 						e.printStackTrace();
 					} catch (LoginException e) {
@@ -234,12 +241,9 @@ public class ClientGUI extends JFrame {
 					}
 				} catch (RemoteException | NullPointerException | LoginException e) {
 					addNotification("No connection to the server");
-				} finally {
-					uploadButton.setEnabled(true);
 				}
 			});
 			
-			uploadButton.setEnabled(false);
 			uploadThread.start();
 		});
 		

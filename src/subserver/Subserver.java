@@ -36,7 +36,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 	
 	private final HashMap<String, Video> videos = new HashMap<>();
 	private final ConcurrentHashMap<String, Thread> requestedVideos = new ConcurrentHashMap<>();
-	private final HashMap<String, Thread> threads = new HashMap<>();
+	//private final HashMap<String, Thread> threads = new HashMap<>();
 	
 	public Subserver(String centralHost, int centralPort, boolean nogui) throws RemoteException {
 		log = new Logger(nogui ? System.out::print : (new SubserverGUI())::print);
@@ -62,7 +62,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 							
 							Utils.sleep(3000);
 						}
-					} catch (RemoteException e) {
+					} catch (IOException e) {
 						log.info("Failed connecting to Central server, reattempting in 2 seconds");
 						Utils.sleep(2000);
 					}
@@ -97,30 +97,32 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 		ArrayList<ClientData> users = server.getUsers(id);
 		
 		for (ClientData client : users) {
-			if (threads.containsKey(client.username) && threads.get(client.username).isAlive()) {
-				log.info("Connection attempt to '" + client.username + "' is still running, skipping");
-				continue;
-			}
+			//if (threads.containsKey(client.username) && threads.get(client.username).isAlive()) {
+			//	log.info("Connection attempt to '" + client.username + "' is still running, skipping");
+			//	continue;
+			//}
 			
-			Thread thread = new Thread(() -> {
+			
+			//Thread thread =
+			(new Thread(() -> {
 				try {
 					log.info("Trying to assign to user '" + client.username + "'");
 					client.client.assignSubserver(this, client.username, wakeupTime);
 					log.info("User '" + client.username + "' has been assigned");
-				} catch (RemoteException e) {
+				} catch (IOException e) {
 					log.info("Failed connecting to user " + client.username);
 				} catch (LoginException e) {
 					log.info(e.getMessage());
 				}
-			});
+			})).start();
 			
-			threads.put(client.username, thread);
-			thread.start();
+			// threads.put(client.username, thread);
+			// thread.start();
 		}
 	}
 	
 	@Override
-	public void setId(int id, long wakeupTime) throws RemoteException {
+	public void setId(int id, long wakeupTime) {
 		log.info("ID set to '" + id + "', wake time set to '" + wakeupTime + "'");
 		
 		this.id = id;
@@ -131,10 +133,14 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 	}
 	
 	@Override
-	public void uploadVideoDataToCentral(String video, Data data, String owner) throws LoginException, RemoteException {
+	public void uploadVideoDataToCentral(String video, Data data, String owner) throws LoginException {
 		log.info("Uploading data for video '" + video + "' by user '" + owner + "'");
 		
-		server.uploadVideoDataToCentral(video, data, owner);
+		try {
+			server.uploadVideoDataToCentral(video, data, owner);
+		} catch (IOException e) {
+			log.error("Error uploading video '" + video + "' by user '" + owner + "' to the central server", "Error uploading video to the central server");
+		}
 	}
 	
 	@Override
@@ -154,7 +160,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 		log.info("Receiving updated room data for room " + room);
 		try {
 			return server.getRoomData(room);
-		} catch (RemoteException e) {
+		} catch (IOException e) {
 			log.error("No connection to the central server while getting data for room '" + room + "'", "Couldn't get the room data from central server!");
 		}
 		
@@ -166,7 +172,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 		log.info("Sending updated room data for room " + room + " [" + time + ", " + paused + "]");
 		try {
 			server.setRoomData(room, time, paused);
-		} catch (RemoteException e) {
+		} catch (IOException e) {
 			log.error("No connection to the central server while getting data for room '" + room + "'", "Couldn't get the room data to central server!");
 		}
 	}
@@ -176,7 +182,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 		log.info("Sending request for room creation " + room);
 		try {
 			server.createRoom(room);
-		} catch (RemoteException e) {
+		} catch (IOException e) {
 			log.error("No connection to the central server while creaing room '" + room + "'", "Couldn't get the room to central server!");
 		}
 	}
@@ -204,7 +210,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 		log.info("User " + username + " requested all rooms he is a part of");
 		try {
 			return server.getRooms(username);
-		} catch (RemoteException e) {
+		} catch (IOException e) {
 			log.error("No connection to the central server while getting rooms for user '" + username + "'", "Couldn't get rooms from central server!");
 		}
 		
@@ -217,7 +223,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 		
 		try {
 			return server.getUsers();
-		} catch (RemoteException e) {
+		} catch (IOException e) {
 			log.error("No connection to the central server while getting all users", "Couldn't get users from central server!");
 		}
 		
@@ -262,7 +268,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 		
 		try {
 			return server.reserveVideo(video, owner);
-		} catch (RemoteException e) {
+		} catch (IOException e) {
 			log.error("No connection to the central server while getting video reservation for video '" + video + "' for user '" + owner + "'", "Couldn't get video reservation from central server!");
 		}
 		
@@ -274,7 +280,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 		log.info("Finalizing video on central server '" + video + "'");
 		try {
 			server.finalizeVideoOnCentral(video, owner);
-		} catch (RemoteException e) {
+		} catch (IOException e) {
 			log.error("No connection to the central server while finalizing video '" + video + "' for user '" + owner + "'", "Couldn't get video finalization to central server!");
 		}
 	}

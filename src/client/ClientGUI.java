@@ -210,14 +210,25 @@ public class ClientGUI extends JFrame {
 					if (file == null) throw new LoginException("No video selected for upload");
 					if (!owner.subserver.reserveVideo(file.getName(), owner.username)) throw new LoginException("Video '" + file.getName() + "' already exists");
 					
+					JLabel notification = addNotification("Uploading video '" + file.getName() + "' 0%");
+					
 					try (InputStream is = new FileInputStream(file)) {
 						int readBytes;
 						byte[] b = new byte[1024 * 1024 * 16];
 						
-						while (!Thread.currentThread().isInterrupted() && (readBytes = is.read(b)) != -1)
+						long total = file.length();
+						long uploaded = 0;
+						while (!Thread.currentThread().isInterrupted() && (readBytes = is.read(b)) != -1) {
 							owner.subserver.uploadVideoDataToCentral(file.getName(), new Data(b, readBytes), owner.username);
+							uploaded += readBytes;
+							
+							notification.setText("Uploading video '" + file.getName() + "' " + (int) ((double) uploaded / total * 100) + "%");
+							revalidate();
+						}
 						
-						if (!Thread.currentThread().isInterrupted()) owner.subserver.finalizeVideo(file.getName(), owner.username);
+						if (!Thread.currentThread().isInterrupted()) {
+							owner.subserver.finalizeVideo(file.getName(), owner.username);
+						}
 					}
 				} catch (LoginException e) {
 					addNotification(e.getMessage());
@@ -389,16 +400,19 @@ public class ClientGUI extends JFrame {
 		else rooms.setSelectedItem(room);
 	}
 	
-	public void addNotification(String text) {
+	public JLabel addNotification(String text) {
 		JPanel notification = new JPanel(new BorderLayout());
 		
-		notification.add(new JLabel(text), BorderLayout.LINE_START);
+		JLabel notificationText = new JLabel(text);
+		notification.add(notificationText, BorderLayout.LINE_START);
 		notification.add(new JLabel(new SimpleDateFormat("   dd/MM/yyyy HH:mm:ss").format(new Date())), BorderLayout.LINE_END);
 		
 		notification.setMaximumSize(new Dimension(Integer.MAX_VALUE, notification.getMinimumSize().height));
 		
 		notificationsPanel.add(notification);
 		revalidate();
+		
+		return notificationText;
 	}
 	
 	public void addVideo(String title) {

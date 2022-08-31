@@ -64,7 +64,7 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 			
 			while (true) {
 				try {
-					if (counter == 5 || wakeupTime != subserver.status()) {
+					if (counter == 50 || wakeupTime != subserver.status()) {
 						reset();
 						break;
 					}
@@ -82,10 +82,10 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 					
 				} catch (RemoteException | NullPointerException e) {
 					counter++;
-					gui.labelConnection.setText("STATUS: Disconnected | " + counter + "/5 Tries");
+					gui.labelConnection.setText("STATUS: Disconnected | " + counter + "/50 Tries");
 					gui.labelConnection.setForeground(new Color(153, 0, 0));
 					
-					Utils.sleep(10000);
+					Utils.sleep(2000);
 				} catch (LoginException e) {
 					gui.addNotification(e.getMessage());
 				}

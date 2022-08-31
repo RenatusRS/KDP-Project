@@ -117,7 +117,7 @@ public class CentralServer implements CentralServerInterface {
 							finalServer.server.status();
 							period = 16000;
 							count = 1;
-						} catch (RemoteException e) {
+						} catch (IOException e) {
 							period /= 2;
 							count++;
 						}
@@ -151,7 +151,7 @@ public class CentralServer implements CentralServerInterface {
 				unassignedUsers.clear();
 			}
 			userLock.unlock();
-		} catch (RemoteException e) {
+		} catch (IOException e) {
 			log.info("Lost connection to subserver during its insertion");
 		}
 	}

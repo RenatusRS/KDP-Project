@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class Subserver extends UnicastRemoteObject implements SubserverInterface, Serializable {
 	static {
 		if (System.getSecurityManager() == null) System.setSecurityManager(new SecurityManager());
+		System.setProperty("sun.rmi.transport.tcp.responseTimeout", "7000");
 	}
 	
 	private CentralServerInterface server;
@@ -59,7 +60,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 							syncVideos();
 							syncUsers();
 							
-							Utils.sleep(7000);
+							Utils.sleep(3000);
 						}
 					} catch (RemoteException e) {
 						log.info("Failed connecting to Central server, reattempting in 2 seconds");
@@ -235,14 +236,15 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 			
 			try (InputStream is = videoFile.read()) {
 				int readBytes;
-				byte[] b = new byte[1024 * 1024 * 32];
+				byte[] b = new byte[1024 * 1024 * 16];
 				
-				while (!requestedVideos.get(video + client.username).isInterrupted() && (readBytes = is.read(b)) != -1) {
+				while (!Thread.currentThread().isInterrupted() && (readBytes = is.read(b)) != -1) {
 					log.info("Sending data for video '" + videoFile.name + "' to user '" + client.username + "'");
 					client.client.uploadSubserverToClient(videoFile.name, new Data(b, readBytes));
 				}
-				if (!Thread.interrupted()) client.client.finalizeVideo(videoFile.name);
-			} catch (Exception e) {
+				
+				if (!Thread.currentThread().isInterrupted()) client.client.finalizeVideo(videoFile.name);
+			} catch (IOException e) {
 				log.info("Failed sending video '" + video + "' to client '" + client.username + "'");
 			}
 			

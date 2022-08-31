@@ -203,47 +203,32 @@ public class ClientGUI extends JFrame {
 		});
 		
 		uploadButton.addActionListener((ae) -> {
-			if (uploadThread != null && uploadThread.isAlive()) {
-				addNotification("Stopping previous upload and starting a new one!");
-				uploadThread.interrupt();
-			}
-			
 			uploadThread = new Thread(() -> {
-				File file = fileChooser.getSelectedFile();
-				
 				try {
+					File file = fileChooser.getSelectedFile();
 					
-					if (file == null) return;
-					if (!owner.subserver.reserveVideo(file.getName(), owner.username)) {
-						addNotification("Video '" + file.getName() + "' already exists");
-						return;
-					}
-					
-					long total = file.length();
+					if (file == null) throw new LoginException("No video selected for upload");
+					if (!owner.subserver.reserveVideo(file.getName(), owner.username)) throw new LoginException("Video '" + file.getName() + "' already exists");
 					
 					try (InputStream is = new FileInputStream(file)) {
 						int readBytes;
 						byte[] b = new byte[1024 * 1024 * 16];
 						
-						while (!uploadThread.isInterrupted() && (readBytes = is.read(b)) != -1) {
-							total -= readBytes;
-							System.out.println(total);
+						while (!Thread.currentThread().isInterrupted() && (readBytes = is.read(b)) != -1)
 							owner.subserver.uploadVideoDataToCentral(file.getName(), new Data(b, readBytes), owner.username);
-						}
-						System.out.println("im out");
 						
-						if (!Thread.interrupted()) owner.subserver.finalizeVideo(file.getName(), owner.username);
-						else System.out.println(file.getName() + " got interrupted.");
-					} catch (IOException e) {
-						e.printStackTrace();
-					} catch (LoginException e) {
-						addNotification(e.getMessage());
+						if (!Thread.currentThread().isInterrupted()) owner.subserver.finalizeVideo(file.getName(), owner.username);
 					}
-				} catch (RemoteException | NullPointerException | LoginException e) {
-					addNotification("No connection to the server");
+				} catch (LoginException e) {
+					addNotification(e.getMessage());
+				} catch (IOException | NullPointerException e) {
+					addNotification("No connection to the server, upload cancelled");
 				}
+				
+				uploadButton.setEnabled(true);
 			});
 			
+			uploadButton.setEnabled(false);
 			uploadThread.start();
 		});
 		

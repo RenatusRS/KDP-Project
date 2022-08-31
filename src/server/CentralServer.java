@@ -32,6 +32,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class CentralServer implements CentralServerInterface {
 	static {
 		if (System.getSecurityManager() == null) System.setSecurityManager(new SecurityManager());
+		System.setProperty("sun.rmi.transport.tcp.responseTimeout", "7000");
 	}
 	
 	private final long wakeupTime = System.currentTimeMillis();
@@ -282,12 +283,12 @@ public class CentralServer implements CentralServerInterface {
 			
 			try (InputStream is = videoFile.read()) {
 				int readBytes;
-				byte[] b = new byte[1024 * 1024 * 32];
+				byte[] b = new byte[1024 * 1024 * 16];
 				
 				while ((readBytes = is.read(b)) != -1) subserver.uploadCentralToSubserver(videoFile.name, new Data(b, readBytes));
 				
 				subserver.finalizeVideoFromCentral(videoFile.name);
-			} catch (Exception e) {
+			} catch (IOException e) {
 				log.info("Failed sending video '" + video + "' to subserver " + subserverID);
 				requestedVideos.remove(video + subserverID);
 			}

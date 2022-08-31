@@ -25,6 +25,7 @@ import java.util.HashMap;
 public class Client extends UnicastRemoteObject implements ClientInterface {
 	static {
 		if (System.getSecurityManager() == null) System.setSecurityManager(new SecurityManager());
+		System.setProperty("sun.rmi.transport.tcp.responseTimeout", "7000");
 	}
 	
 	private final transient String centralHost;

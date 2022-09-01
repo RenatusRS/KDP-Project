@@ -171,16 +171,17 @@ public class ClientGUI extends JFrame {
 	
 	private JPanel browsePanel() {
 		notificationsPanel.setLayout(new BoxLayout(notificationsPanel, BoxLayout.PAGE_AXIS));
-		notificationsPanel.setBorder(BorderFactory.createTitledBorder("Notifications"));
+		
 		
 		JScrollPane videosScroll = new JScrollPane(videosPanel,
 				JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 		
 		JScrollPane notificationsScroll = new JScrollPane(notificationsPanel,
 				JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+		notificationsScroll.setBorder(BorderFactory.createTitledBorder("Notifications"));
 		
 		videosPanel.setLayout(new BoxLayout(videosPanel, BoxLayout.PAGE_AXIS));
-		videosPanel.setBorder(BorderFactory.createTitledBorder("Videos"));
+		videosScroll.setBorder(BorderFactory.createTitledBorder("Videos"));
 		
 		JPanel uploadPanel = new JPanel(new BorderLayout());
 		uploadPanel.setBorder(BorderFactory.createTitledBorder("Upload"));
@@ -243,7 +244,6 @@ public class ClientGUI extends JFrame {
 			uploadThread.start();
 		});
 		
-		
 		JPanel buttonsPanel = new JPanel(new BorderLayout());
 		
 		buttonsPanel.add(fileButton, BorderLayout.LINE_START);
@@ -271,7 +271,7 @@ public class ClientGUI extends JFrame {
 			
 			Room room = (Room) e.getItem();
 			
-			player.setControls(owner.username.equals(room.owner));
+			player.setControls(false);
 			
 			if (syncThread != null) {
 				syncThread.interrupt();
@@ -284,67 +284,85 @@ public class ClientGUI extends JFrame {
 			
 			if (room.toString().equals("0 | " + owner.username + " | Local Room")) {
 				createRoom.setEnabled(true);
-			} else {
-				try {
-					room = owner.subserver.getRoomData(room.getID());
-					
-					
-					playVideo(room.video);
-					player.pause(room.getPaused());
-					player.seek(room.getTime());
-					
-					createRoom.setEnabled(false);
-					
-					Room finalRoom = room;
-					if (finalRoom.owner.equals(owner.username)) syncThread = new Thread(() -> {
-						try {
-							while (!syncThread.isInterrupted()) {
-								try {
-									owner.subserver.setRoomData(finalRoom.getID(), player.progress.getValue(), player.getPaused());
-								} catch (RemoteException | LoginException e1) {
-									addNotification("Couldn't update room, no connection to the server, retrying");
-									
-									Thread.sleep(1500);
-								}
-								
-								Thread.sleep(250);
-							}
-						} catch (InterruptedException | ArrayIndexOutOfBoundsException ignored) {
-						}
-					});
-					else syncThread = new Thread(() -> {
-						Room temp;
-						try {
-							while (!syncThread.isInterrupted()) {
-								try {
-									temp = owner.subserver.getRoomData(finalRoom.getID());
-									
-									System.out.println(temp.getTime() + " - " + player.getTime() + " = " + Math.abs(temp.getTime() - player.getTime()));
-									if (temp.getPaused()) {
-										player.pause(true);
-										if (temp.getTime() != player.getTime()) player.seek(temp.getTime());
-									} else {
-										if (player.getPaused() || Math.abs(temp.getTime() - player.getTime()) > 1000) player.seek(temp.getTime());
-										player.pause(false);
-									}
-									
-									Thread.sleep(250);
-								} catch (RemoteException | LoginException e1) {
-									player.pause(true);
-									addNotification("Couldn't refresh room, no connection to the server, retrying");
-									
-									Thread.sleep(1500);
-								}
-							}
-						} catch (InterruptedException | ArrayIndexOutOfBoundsException ignored) {
-						}
-					});
-					
-					syncThread.start();
-				} catch (RemoteException | LoginException ex) {
-					addNotification("Couldn't get selected room data, no connecton to the server");
-				}
+				player.setControls(true);
+				return;
 			}
+			
+			createRoom.setEnabled(false);
+			
+			player.play("uploads/client/" + owner.username + "/" + room.video);
+			player.pause(true);
+			
+			if (room.owner.equals(owner.username)) syncThread = new Thread(() -> {
+				try {
+					while (!Thread.currentThread().isInterrupted()) {
+						try {
+							Room finalRoom = owner.subserver.getRoomData(room.getID());
+							player.pause(finalRoom.getPaused());
+							player.seek(finalRoom.getTime());
+							
+							break;
+						} catch (RemoteException | LoginException e1) {
+							addNotification("Couldn't get room, no connection to the server, retrying");
+							Thread.sleep(1500);
+						}
+					}
+					
+					player.setControls(true);
+					
+					while (!Thread.currentThread().isInterrupted()) {
+						try {
+							owner.subserver.setRoomData(room.getID(), player.progress.getValue(), player.getPaused());
+						} catch (RemoteException | LoginException e1) {
+							addNotification("Couldn't update room, no connection to the server, retrying");
+							Thread.sleep(1000);
+						}
+						
+						Thread.sleep(250);
+					}
+				} catch (InterruptedException | ArrayIndexOutOfBoundsException ignored) {
+				}
+			});
+			else syncThread = new Thread(() -> {
+				try {
+					while (!Thread.currentThread().isInterrupted()) {
+						try {
+							Room finalRoom = owner.subserver.getRoomData(room.getID());
+							player.pause(finalRoom.getPaused());
+							player.seek(finalRoom.getTime());
+							
+							break;
+						} catch (RemoteException | LoginException e1) {
+							addNotification("Couldn't get room, no connection to the server, retrying");
+							Thread.sleep(1000);
+						}
+					}
+					
+					while (!Thread.currentThread().isInterrupted()) {
+						try {
+							Room temp = owner.subserver.getRoomData(room.getID());
+							
+							System.out.println(temp.getTime() + " - " + player.getTime() + " = " + Math.abs(temp.getTime() - player.getTime()));
+							if (temp.getPaused()) {
+								player.pause(true);
+								if (temp.getTime() != player.getTime()) player.seek(temp.getTime());
+							} else {
+								if (player.getPaused() || Math.abs(temp.getTime() - player.getTime()) > 1000) player.seek(temp.getTime());
+								player.pause(false);
+							}
+							
+							Thread.sleep(250);
+						} catch (RemoteException | LoginException e1) {
+							player.pause(true);
+							addNotification("Couldn't refresh room, no connection to the server, retrying");
+							Thread.sleep(1000);
+						}
+					}
+				} catch (InterruptedException | ArrayIndexOutOfBoundsException ignored) {
+				}
+			});
+			
+			syncThread.start();
 		});
 		
 		createRoom.addActionListener((ae) -> {
@@ -405,11 +423,11 @@ public class ClientGUI extends JFrame {
 		
 		JLabel notificationText = new JLabel(text);
 		notification.add(notificationText, BorderLayout.LINE_START);
-		notification.add(new JLabel(new SimpleDateFormat("   dd/MM/yyyy HH:mm:ss").format(new Date())), BorderLayout.LINE_END);
+		notification.add(new JLabel(new SimpleDateFormat("   dd/MM/yyyy HH:mm:ss  ").format(new Date())), BorderLayout.LINE_END);
 		
 		notification.setMaximumSize(new Dimension(Integer.MAX_VALUE, notification.getMinimumSize().height));
 		
-		notificationsPanel.add(notification);
+		notificationsPanel.add(notification, 0);
 		revalidate();
 		
 		return notificationText;
@@ -439,11 +457,11 @@ public class ClientGUI extends JFrame {
 				rooms.setSelectedIndex(0);
 				tabbedPane.setSelectedIndex(1);
 				
-				playVideo(title);
+				player.play("uploads/client/" + owner.username + "/" + title);
 			}
 		});
 		
-		videosPanel.add(video);
+		videosPanel.add(video, 0);
 		revalidate();
 	}
 	
@@ -453,9 +471,5 @@ public class ClientGUI extends JFrame {
 		
 		usersPanel.add(user);
 		revalidate();
-	}
-	
-	public void playVideo(String title) {
-		player.play("uploads/client/" + owner.username + "/" + title);
 	}
 }

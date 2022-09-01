@@ -99,7 +99,7 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 		if (gui.syncThread != null) gui.syncThread.interrupt();
 		if (gui.uploadThread != null) gui.uploadThread.interrupt();
 		gui.player.pause(true);
-		gui.playVideo("");
+		gui.player.play("");
 		
 		Utils.cleanup("uploads/client/" + username + "/");
 		

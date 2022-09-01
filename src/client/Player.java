@@ -164,15 +164,4 @@ public class Player extends JPanel {
 	public boolean getPaused() {
 		return !emp.mediaPlayer().status().isPlaying();
 	}
-	
-	public static void main(String[] args) {
-		JFrame f = new JFrame();
-		Player v = new Player();
-		f.setContentPane(v);
-		f.setBounds(new Rectangle(200, 200, 800, 600));
-		f.setVisible(true);
-		f.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		
-		v.play("uploads/client/8200/dg.mp4");
-	}
 }

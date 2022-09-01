@@ -172,7 +172,6 @@ public class ClientGUI extends JFrame {
 	private JPanel browsePanel() {
 		notificationsPanel.setLayout(new BoxLayout(notificationsPanel, BoxLayout.PAGE_AXIS));
 		
-		
 		JScrollPane videosScroll = new JScrollPane(videosPanel,
 				JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 		

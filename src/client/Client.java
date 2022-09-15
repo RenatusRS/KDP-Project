@@ -71,7 +71,7 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 					
 					counter = 0;
 					
-					gui.labelConnection.setText("STATUS: Connected");
+					gui.labelConnection.setText(" STATUS: Connected");
 					gui.labelConnection.setForeground(new Color(0, 102, 0));
 					
 					syncVideos();
@@ -82,7 +82,7 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 					
 				} catch (RemoteException | NullPointerException e) {
 					counter++;
-					gui.labelConnection.setText("STATUS: Disconnected | " + counter + "/50 Tries");
+					gui.labelConnection.setText(" STATUS: Disconnected | " + counter + "/50 Tries");
 					gui.labelConnection.setForeground(new Color(153, 0, 0));
 					
 					Utils.sleep(2000);

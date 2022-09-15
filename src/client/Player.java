@@ -25,8 +25,8 @@ public class Player extends JPanel {
 	private boolean moving = false;
 	private boolean controls = true;
 	
-	private final JLabel currentTime = new JLabel("00:00");
-	private final JLabel totalTime = new JLabel("--:--");
+	private final JLabel currentTime = new JLabel("  00:00   ");
+	private final JLabel totalTime = new JLabel("   00:00  ");
 	
 	private long time = 0;
 	
@@ -48,7 +48,7 @@ public class Player extends JPanel {
 	}
 	
 	private void alignTime(long millis) {
-		currentTime.setText(String.format("%02d:%02d", TimeUnit.MILLISECONDS.toMinutes(millis),
+		currentTime.setText(String.format("  %02d:%02d   ", TimeUnit.MILLISECONDS.toMinutes(millis),
 				TimeUnit.MILLISECONDS.toSeconds(millis)
 						- TimeUnit.MINUTES.toSeconds(TimeUnit.MILLISECONDS.toMinutes(millis))));
 	}
@@ -81,7 +81,7 @@ public class Player extends JPanel {
 				
 				progress.setMaximum((int) emp.mediaPlayer().status().length());
 				
-				totalTime.setText(String.format("%02d:%02d", TimeUnit.MILLISECONDS.toMinutes(time),
+				totalTime.setText(String.format("   %02d:%02d  ", TimeUnit.MILLISECONDS.toMinutes(time),
 						TimeUnit.MILLISECONDS.toSeconds(time)
 								- TimeUnit.MINUTES.toSeconds(TimeUnit.MILLISECONDS.toMinutes(time))));
 			}

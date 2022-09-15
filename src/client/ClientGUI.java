@@ -36,7 +36,7 @@ public class ClientGUI extends JFrame {
 	private final JPanel notificationsPanel = new JPanel();
 	private final JPanel videosPanel = new JPanel();
 	
-	final JLabel labelConnection = new JLabel("STATUS: No Connection Attempts", JLabel.LEFT);
+	final JLabel labelConnection = new JLabel();
 	
 	final Player player = new Player();
 	
@@ -90,7 +90,7 @@ public class ClientGUI extends JFrame {
 	public void loginView() {
 		setTitle("KDP Project");
 		
-		labelConnection.setText("STATUS: Disconnected");
+		labelConnection.setText(" STATUS: Disconnected");
 		labelConnection.setForeground(new Color(153, 0, 0));
 		labelError.setText("Disconnected from network, register or sign in again");
 		

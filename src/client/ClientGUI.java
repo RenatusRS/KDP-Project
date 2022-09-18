@@ -174,10 +174,13 @@ public class ClientGUI extends JFrame {
 		
 		JScrollPane videosScroll = new JScrollPane(videosPanel,
 				JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+		videosScroll.getVerticalScrollBar().setUnitIncrement(16);
+		videosScroll.getHorizontalScrollBar().setUnitIncrement(16);
 		
 		JScrollPane notificationsScroll = new JScrollPane(notificationsPanel,
 				JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 		notificationsScroll.setBorder(BorderFactory.createTitledBorder("Notifications"));
+		notificationsScroll.getVerticalScrollBar().setUnitIncrement(16);
 		
 		videosPanel.setLayout(new BoxLayout(videosPanel, BoxLayout.PAGE_AXIS));
 		videosScroll.setBorder(BorderFactory.createTitledBorder("Videos"));
@@ -210,7 +213,7 @@ public class ClientGUI extends JFrame {
 					if (file == null) throw new LoginException("No video selected for upload");
 					if (!owner.subserver.reserveVideo(file.getName(), owner.username)) throw new LoginException("Video '" + file.getName() + "' already exists");
 					
-					JLabel notification = addNotification("Uploading video '" + file.getName() + "' 0%");
+					JTextArea notification = addNotification("Uploading video '" + file.getName() + "' 0%");
 					
 					try (InputStream is = new FileInputStream(file)) {
 						int readBytes;
@@ -397,6 +400,7 @@ public class ClientGUI extends JFrame {
 		
 		JScrollPane usersScroll = new JScrollPane(usersPanel,
 				JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+		usersScroll.getVerticalScrollBar().setUnitIncrement(16);
 		
 		roomPanel.add(rooms, BorderLayout.PAGE_START);
 		roomPanel.add(usersScroll, BorderLayout.CENTER);
@@ -417,14 +421,35 @@ public class ClientGUI extends JFrame {
 		else rooms.setSelectedItem(room);
 	}
 	
-	public JLabel addNotification(String text) {
+	public JTextArea addNotification(String text) {
 		JPanel notification = new JPanel(new BorderLayout());
 		
-		JLabel notificationText = new JLabel(text);
-		notification.add(notificationText, BorderLayout.LINE_START);
-		notification.add(new JLabel(new SimpleDateFormat("   dd/MM/yyyy HH:mm:ss  ").format(new Date())), BorderLayout.LINE_END);
+		JTextArea notificationText = new JTextArea(0, 23);
 		
-		notification.setMaximumSize(new Dimension(Integer.MAX_VALUE, notification.getMinimumSize().height));
+		notificationText.setText(text);
+		notificationText.setWrapStyleWord(true);
+		notificationText.setLineWrap(true);
+		notificationText.setOpaque(true);
+		notificationText.setEditable(false);
+		notificationText.setFocusable(false);
+		notificationText.setBackground(new Color(214, 217, 223));
+		notificationText.setFont(UIManager.getFont("Label.font"));
+		notificationText.setBorder(UIManager.getBorder("Label.border"));
+		
+		JTextArea dateText = new JTextArea(new SimpleDateFormat("   dd/MM/yyyy HH:mm:ss   ").format(new Date()));
+		dateText.setOpaque(true);
+		dateText.setEditable(false);
+		dateText.setFocusable(false);
+		dateText.setBackground(new Color(214, 217, 223));
+		dateText.setFont(UIManager.getFont("Label.font"));
+		dateText.setBorder(UIManager.getBorder("Label.border"));
+		
+		notification.add(notificationText, BorderLayout.CENTER);
+		notification.add(dateText, BorderLayout.LINE_END);
+		
+		dateText.setMaximumSize(new Dimension(Integer.MAX_VALUE, 100));
+		notificationText.setMaximumSize(new Dimension(Integer.MAX_VALUE, 100));
+		notification.setMaximumSize(new Dimension(Integer.MAX_VALUE, 100));
 		
 		notificationsPanel.add(notification, 0);
 		revalidate();

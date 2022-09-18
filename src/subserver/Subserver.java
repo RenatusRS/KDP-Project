@@ -36,7 +36,6 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 	
 	private final HashMap<String, Video> videos = new HashMap<>();
 	private final ConcurrentHashMap<String, Thread> requestedVideos = new ConcurrentHashMap<>();
-	//private final HashMap<String, Thread> threads = new HashMap<>();
 	
 	public Subserver(String centralHost, int centralPort, boolean nogui) throws RemoteException {
 		log = new Logger(nogui ? System.out::print : (new SubserverGUI())::print);
@@ -97,13 +96,6 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 		ArrayList<ClientData> users = server.getUsers(id);
 		
 		for (ClientData client : users) {
-			//if (threads.containsKey(client.username) && threads.get(client.username).isAlive()) {
-			//	log.info("Connection attempt to '" + client.username + "' is still running, skipping");
-			//	continue;
-			//}
-			
-			
-			//Thread thread =
 			(new Thread(() -> {
 				try {
 					log.info("Trying to assign to user '" + client.username + "'");
@@ -115,9 +107,6 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 					log.info(e.getMessage());
 				}
 			})).start();
-			
-			// threads.put(client.username, thread);
-			// thread.start();
 		}
 	}
 	
@@ -157,7 +146,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 	
 	@Override
 	public Room getRoomData(int room) throws LoginException {
-		log.info("Receiving updated room data for room " + room);
+		log.info("Receiving updated room data for room '" + room + "'");
 		try {
 			return server.getRoomData(room);
 		} catch (IOException e) {
@@ -252,9 +241,9 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 				if (!Thread.currentThread().isInterrupted()) client.client.finalizeVideo(videoFile.name);
 			} catch (IOException e) {
 				log.info("Failed sending video '" + video + "' to client '" + client.username + "'");
+			} finally {
+				requestedVideos.remove(video + client.username);
 			}
-			
-			requestedVideos.remove(video + client.username);
 		});
 		
 		requestedVideos.put(video + client.username, thread);

@@ -34,7 +34,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class CentralServer implements CentralServerInterface {
 	static {
 		if (System.getSecurityManager() == null) System.setSecurityManager(new SecurityManager());
-		System.setProperty("sun.rmi.transport.tcp.responseTimeout", "7000");
+		System.setProperty("sun.rmi.transport.tcp.responseTimeout", Utils.TIMEOUT);
 	}
 	
 	private final long wakeupTime = System.currentTimeMillis();

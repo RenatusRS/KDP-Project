@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class Subserver extends UnicastRemoteObject implements SubserverInterface, Serializable {
 	static {
 		if (System.getSecurityManager() == null) System.setSecurityManager(new SecurityManager());
-		System.setProperty("sun.rmi.transport.tcp.responseTimeout", "7000");
+		System.setProperty("sun.rmi.transport.tcp.responseTimeout", Utils.TIMEOUT);
 	}
 	
 	private CentralServerInterface server;

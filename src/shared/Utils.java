@@ -6,6 +6,7 @@ import java.nio.file.Path;
 
 public class Utils {
 	public static final int PACKAGE_SIZE = 1024 * 1024 * 16; // 16MB
+	public static final String TIMEOUT = "7000";
 	
 	public static void cleanup(String location) {
 		Path path = Path.of(location);

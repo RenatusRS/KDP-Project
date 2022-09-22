@@ -51,4 +51,12 @@ public class Video {
 	public FileInputStream read() throws FileNotFoundException {
 		return new FileInputStream(destination + name);
 	}
+	
+	public long size() {
+		return new File(destination + name).length();
+	}
+	
+	public double percent(long uploaded) {
+		return (double) uploaded / size();
+	}
 }

@@ -1,6 +1,9 @@
-package subserver;
+package server;
 
-import shared.*;
+import shared.Data;
+import shared.Room;
+import shared.Utils;
+import shared.Video;
 import shared.interfaces.CentralServerInterface;
 import shared.interfaces.SubserverInterface;
 import shared.remote.ClientData;
@@ -29,20 +32,22 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 	private CentralServerInterface server;
 	
 	private int id;
+	private long wakeupTime = 0;
 	
 	private final Logger log;
-	
-	private long wakeupTime = 0;
 	
 	private final HashMap<String, Video> videos = new HashMap<>();
 	private final ConcurrentHashMap<String, Thread> requestedVideos = new ConcurrentHashMap<>();
 	
 	public Subserver(String centralHost, int centralPort, boolean nogui) throws RemoteException {
-		log = new Logger(nogui ? System.out::print : (new SubserverGUI())::print);
+		log = new Logger(nogui ? System.out::print : (new ServerGUI("Subserver [" + centralHost + ":" + centralPort + "]", "subserver"))::print);
 		
-		log.info("Subserver started");
-		
-		(new Thread(() -> {
+		log.info("Searching for central server on " + centralHost + ":" + centralPort);
+		getSyncThread(centralHost, centralPort).start();
+	}
+	
+	private Thread getSyncThread(String centralHost, int centralPort) {
+		return new Thread(() -> {
 			log.info("Connecting to Central server");
 			
 			try {
@@ -69,7 +74,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 			} catch (NotBoundException e) {
 				e.printStackTrace();
 			}
-		})).start();
+		});
 	}
 	
 	private void syncVideos() throws RemoteException {
@@ -80,8 +85,8 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 		for (String videoName : videoNames) {
 			try {
 				log.info("Requesting video " + videoName);
-				server.requestVideoFromCentral(videoName, id);
 				Files.deleteIfExists(Path.of("uploads/subserver/" + id + "/" + videoName));
+				server.requestVideoFromCentral(videoName, id);
 				videos.put(videoName, new Video(videoName, null));
 			} catch (LoginException e) {
 				log.info(e.getMessage());
@@ -95,19 +100,21 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 		log.info("Checking for my users");
 		ArrayList<ClientData> users = server.getUsers(id);
 		
-		for (ClientData client : users) {
-			(new Thread(() -> {
-				try {
-					log.info("Trying to assign to user '" + client.username + "'");
-					client.client.assignSubserver(this, client.username, wakeupTime);
-					log.info("User '" + client.username + "' has been assigned");
-				} catch (IOException e) {
-					log.info("Failed connecting to user " + client.username);
-				} catch (LoginException e) {
-					log.info(e.getMessage());
-				}
-			})).start();
-		}
+		for (ClientData client : users) getUserConnectionThread(client).start();
+	}
+	
+	private Thread getUserConnectionThread(ClientData client) {
+		return new Thread(() -> {
+			try {
+				log.info("Trying to assign to user '" + client.username + "'");
+				client.client.assignSubserver(this, client.username, wakeupTime);
+				log.info("User '" + client.username + "' has been assigned");
+			} catch (IOException e) {
+				log.info("Failed connecting to user '" + client.username + "'");
+			} catch (LoginException e) {
+				log.info(e.getMessage());
+			}
+		});
 	}
 	
 	@Override
@@ -196,7 +203,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 	
 	@Override
 	public ArrayList<Room> getRooms(String username) throws LoginException {
-		log.info("User " + username + " requested all rooms he is a part of");
+		log.info("User '" + username + "' requested all rooms he is a part of");
 		try {
 			return server.getRooms(username);
 		} catch (IOException e) {
@@ -226,29 +233,35 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 		if (requestedVideos.containsKey(video + client.username))
 			log.error("Subserver already sending video '" + video + "' to client '" + client.username + "'", "Video '" + video + "' is already being sent");
 		
-		Thread thread = new Thread(() -> {
+		Thread thread = getUploadThread(video, client);
+		requestedVideos.put(video + client.username, thread);
+		thread.start();
+	}
+	
+	private Thread getUploadThread(String video, ClientData client) {
+		return new Thread(() -> {
 			Video videoFile = videos.get(video);
 			
+			long total = videoFile.size();
+			long uploaded = 0;
 			try (InputStream is = videoFile.read()) {
 				int readBytes;
-				byte[] b = new byte[1024 * 1024 * 16];
+				byte[] b = new byte[Utils.PACKAGE_SIZE];
 				
 				while (!Thread.currentThread().isInterrupted() && (readBytes = is.read(b)) != -1) {
-					log.info("Sending data for video '" + videoFile.name + "' to user '" + client.username + "'");
+					uploaded += readBytes;
+					log.info("Sending data for video '" + videoFile.name + "' to user '" + client.username + "' [" + uploaded + "/" + total + ", " + videoFile.percent(uploaded) * 100 + "%]");
+					
 					client.client.uploadSubserverToClient(videoFile.name, new Data(b, readBytes));
 				}
 				
 				if (!Thread.currentThread().isInterrupted()) client.client.finalizeVideo(videoFile.name);
 			} catch (IOException e) {
 				log.info("Failed sending video '" + video + "' to client '" + client.username + "'");
-			} finally {
-				requestedVideos.remove(video + client.username);
 			}
+			
+			requestedVideos.remove(video + client.username);
 		});
-		
-		requestedVideos.put(video + client.username, thread);
-		
-		thread.start();
 	}
 	
 	@Override

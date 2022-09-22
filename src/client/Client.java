@@ -26,6 +26,12 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 	static {
 		if (System.getSecurityManager() == null) System.setSecurityManager(new SecurityManager());
 		System.setProperty("sun.rmi.transport.tcp.responseTimeout", "7000");
+		
+		try {
+			UIManager.setLookAndFeel("javax.swing.plaf.nimbus.NimbusLookAndFeel");
+		} catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException e) {
+			throw new RuntimeException(e);
+		}
 	}
 	
 	private final transient String centralHost;
@@ -59,7 +65,11 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 		
 		gui.mainView();
 		
-		(new Thread(() -> {
+		getSyncThread().start();
+	}
+	
+	private Thread getSyncThread() {
+		return new Thread(() -> {
 			int counter = 0;
 			
 			while (true) {
@@ -90,7 +100,7 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 					gui.addNotification(e.getMessage());
 				}
 			}
-		})).start();
+		});
 	}
 	
 	private void reset() {
@@ -145,7 +155,6 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 	@Override
 	public void finalizeVideo(String video) {
 		videos.get(video).finished = true;
-		gui.addNotification("Downloaded video '" + video + "'");
 		gui.addVideo(video);
 	}
 	
@@ -157,8 +166,7 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 		this.subserver = subserver;
 	}
 	
-	public static void main(String[] args) throws RemoteException, UnsupportedLookAndFeelException, ClassNotFoundException, InstantiationException, IllegalAccessException {
-		UIManager.setLookAndFeel("javax.swing.plaf.nimbus.NimbusLookAndFeel");
+	public static void main(String[] args) throws RemoteException {
 		new Client(args.length > 0 ? args[0] : "localhost", args.length > 1 ? Integer.parseInt(args[1]) : 8000);
 	}
 }

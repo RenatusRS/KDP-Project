@@ -1,4 +1,4 @@
-package shared;
+package server;
 
 import javax.security.auth.login.LoginException;
 import java.text.SimpleDateFormat;

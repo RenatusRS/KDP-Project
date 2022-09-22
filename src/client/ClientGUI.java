@@ -2,12 +2,11 @@ package client;
 
 import shared.Data;
 import shared.Room;
+import shared.Utils;
 
 import javax.security.auth.login.LoginException;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.ItemEvent;
@@ -31,7 +30,7 @@ public class ClientGUI extends JFrame {
 	private final JTextField textUsername = new JTextField(18);
 	private final JTextField textPassword = new JPasswordField();
 	private final JTextField textPasswordConfirm = new JPasswordField();
-	private final JButton buttonLogin = new JButton("Login");
+	private final JButton buttonLogin = new JButton("SIGN-IN");
 	
 	private final JPanel notificationsPanel = new JPanel();
 	private final JPanel videosPanel = new JPanel();
@@ -104,6 +103,9 @@ public class ClientGUI extends JFrame {
 		tabbedPane.add(loginPanel, "Login");
 	}
 	
+	// ========================
+	// LOGIN PANEL
+	// ========================
 	private JPanel loginPanel() {
 		JPanel loginPanel = new JPanel(new GridBagLayout());
 		loginPanel.setBorder(new EmptyBorder(4, 4, 4, 4));
@@ -113,51 +115,11 @@ public class ClientGUI extends JFrame {
 		
 		labelError.setForeground(new Color(153, 0, 0));
 		
-		textPasswordConfirm.getDocument().addDocumentListener(new DocumentListener() {
-			@Override
-			public void insertUpdate(DocumentEvent e) {
-				updateFieldState();
-			}
-			
-			@Override
-			public void removeUpdate(DocumentEvent e) {
-				updateFieldState();
-			}
-			
-			@Override
-			public void changedUpdate(DocumentEvent e) {
-				updateFieldState();
-			}
-			
-			private void updateFieldState() {
-				buttonLogin.setText(textPasswordConfirm.getText().isEmpty() ? "Login" : "Registration");
-			}
-		});
+		buttonLogin.addActionListener((ae) -> buttonLoginEvent());
 		
-		buttonLogin.addActionListener((ae) -> {
-			try {
-				if (textUsername.getText().isBlank()) throw new LoginException("Missing username!");
-				if (textPassword.getText().isEmpty()) throw new LoginException("Missing password!");
-				
-				owner.username = textUsername.getText();
-				
-				if (textPasswordConfirm.getText().isEmpty()) owner.loggedIn(textUsername.getText(), textPassword.getText(), false);
-				else {
-					if (!textPassword.getText().equals(textPasswordConfirm.getText())) throw new LoginException("Password confirmation incorrect!");
-					owner.loggedIn(textUsername.getText(), textPassword.getText(), true);
-				}
-			} catch (LoginException e) {
-				labelError.setText(e.getMessage());
-			} catch (RemoteException e) {
-				labelError.setText("Couldn't connect to the central server.");
-			} catch (NotBoundException e) {
-				e.printStackTrace();
-			}
-		});
-		
-		fieldsPanel.add(new JLabel("Username"));
+		fieldsPanel.add(new JLabel("Username'"));
 		fieldsPanel.add(textUsername);
-		fieldsPanel.add(new JLabel("Password"));
+		fieldsPanel.add(new JLabel("Password'"));
 		fieldsPanel.add(textPassword);
 		fieldsPanel.add(new JLabel("Confirm Password"));
 		fieldsPanel.add(textPasswordConfirm);
@@ -169,6 +131,30 @@ public class ClientGUI extends JFrame {
 		return loginPanel;
 	}
 	
+	private void buttonLoginEvent() {
+		try {
+			if (textUsername.getText().isBlank()) throw new LoginException("Missing username!");
+			if (textPassword.getText().isEmpty()) throw new LoginException("Missing password!");
+			
+			owner.username = textUsername.getText();
+			
+			if (textPasswordConfirm.getText().isEmpty()) owner.loggedIn(textUsername.getText(), textPassword.getText(), false);
+			else {
+				if (!textPassword.getText().equals(textPasswordConfirm.getText())) throw new LoginException("Password confirmation incorrect!");
+				owner.loggedIn(textUsername.getText(), textPassword.getText(), true);
+			}
+		} catch (LoginException e) {
+			labelError.setText(e.getMessage());
+		} catch (RemoteException e) {
+			labelError.setText("Couldn't connect to the central server.");
+		} catch (NotBoundException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	// ========================
+	// BROWSE PANEL
+	// ========================
 	private JPanel browsePanel() {
 		notificationsPanel.setLayout(new BoxLayout(notificationsPanel, BoxLayout.PAGE_AXIS));
 		
@@ -206,41 +192,7 @@ public class ClientGUI extends JFrame {
 		});
 		
 		uploadButton.addActionListener((ae) -> {
-			uploadThread = new Thread(() -> {
-				try {
-					File file = fileChooser.getSelectedFile();
-					
-					if (file == null) throw new LoginException("No video selected for upload");
-					if (!owner.subserver.reserveVideo(file.getName(), owner.username)) throw new LoginException("Video '" + file.getName() + "' already exists");
-					
-					JTextArea notification = addNotification("Uploading video '" + file.getName() + "' 0%");
-					
-					try (InputStream is = new FileInputStream(file)) {
-						int readBytes;
-						byte[] b = new byte[1024 * 1024 * 16];
-						
-						long total = file.length();
-						long uploaded = 0;
-						while (!Thread.currentThread().isInterrupted() && (readBytes = is.read(b)) != -1) {
-							owner.subserver.uploadVideoDataToCentral(file.getName(), new Data(b, readBytes), owner.username);
-							uploaded += readBytes;
-							
-							notification.setText("Uploading video '" + file.getName() + "' " + (int) ((double) uploaded / total * 100) + "%");
-							revalidate();
-						}
-						
-						if (!Thread.currentThread().isInterrupted()) {
-							owner.subserver.finalizeVideo(file.getName(), owner.username);
-						}
-					}
-				} catch (LoginException e) {
-					addNotification(e.getMessage());
-				} catch (IOException | NullPointerException e) {
-					addNotification("No connection to the server, upload cancelled");
-				}
-				
-				uploadButton.setEnabled(true);
-			});
+			uploadThread = getUploadThread();
 			
 			uploadButton.setEnabled(false);
 			uploadThread.start();
@@ -267,133 +219,51 @@ public class ClientGUI extends JFrame {
 		return browsePanel;
 	}
 	
-	private JPanel watchPanel() {
-		rooms.addItemListener(e -> {
-			if (e.getStateChange() != ItemEvent.SELECTED || tabbedPane.getSelectedIndex() != 1) return;
-			
-			Room room = (Room) e.getItem();
-			
-			player.setControls(false);
-			
-			if (syncThread != null) {
-				syncThread.interrupt();
-				try {
-					syncThread.join();
-				} catch (InterruptedException ex) {
-					ex.printStackTrace();
-				}
-			}
-			
-			if (room.toString().equals("0 | " + owner.username + " | Local Room")) {
-				createRoom.setEnabled(true);
-				player.setControls(true);
-				return;
-			}
-			
-			createRoom.setEnabled(false);
-			
-			player.play("uploads/client/" + owner.username + "/" + room.video);
-			player.pause(true);
-			
-			if (room.owner.equals(owner.username)) syncThread = new Thread(() -> {
-				try {
-					while (!Thread.currentThread().isInterrupted()) {
-						try {
-							Room finalRoom = owner.subserver.getRoomData(room.getID());
-							player.pause(finalRoom.getPaused());
-							player.seek(finalRoom.getTime());
-							
-							break;
-						} catch (RemoteException | LoginException e1) {
-							addNotification("Couldn't get room, no connection to the server, retrying");
-							Thread.sleep(1500);
-						}
-					}
-					
-					player.setControls(true);
-					
-					while (!Thread.currentThread().isInterrupted()) {
-						try {
-							owner.subserver.setRoomData(room.getID(), player.progress.getValue(), player.getPaused());
-						} catch (RemoteException | LoginException e1) {
-							addNotification("Couldn't update room, no connection to the server, retrying");
-							Thread.sleep(1000);
-						}
-						
-						Thread.sleep(250);
-					}
-				} catch (InterruptedException | ArrayIndexOutOfBoundsException ignored) {
-				}
-			});
-			else syncThread = new Thread(() -> {
-				try {
-					while (!Thread.currentThread().isInterrupted()) {
-						try {
-							Room finalRoom = owner.subserver.getRoomData(room.getID());
-							player.pause(finalRoom.getPaused());
-							player.seek(finalRoom.getTime());
-							
-							break;
-						} catch (RemoteException | LoginException e1) {
-							addNotification("Couldn't get room, no connection to the server, retrying");
-							Thread.sleep(1000);
-						}
-					}
-					
-					while (!Thread.currentThread().isInterrupted()) {
-						try {
-							Room temp = owner.subserver.getRoomData(room.getID());
-							
-							System.out.println(temp.getTime() + " - " + player.getTime() + " = " + Math.abs(temp.getTime() - player.getTime()));
-							if (temp.getPaused()) {
-								player.pause(true);
-								if (temp.getTime() != player.getTime()) player.seek(temp.getTime());
-							} else {
-								if (player.getPaused() || Math.abs(temp.getTime() - player.getTime()) > 1000) player.seek(temp.getTime());
-								player.pause(false);
-							}
-							
-							Thread.sleep(250);
-						} catch (RemoteException | LoginException e1) {
-							player.pause(true);
-							addNotification("Couldn't refresh room, no connection to the server, retrying");
-							Thread.sleep(1000);
-						}
-					}
-				} catch (InterruptedException | ArrayIndexOutOfBoundsException ignored) {
-				}
-			});
-			
-			syncThread.start();
-		});
-		
-		createRoom.addActionListener((ae) -> {
-			if (player.getVideo() == null) return;
-			
-			ArrayList<String> viewers = new ArrayList<>();
-			
-			for (Component user : usersPanel.getComponents())
-				if (user instanceof JCheckBox) {
-					JCheckBox checkBox = (JCheckBox) user;
-					
-					if (checkBox.isSelected()) {
-						viewers.add(checkBox.getText());
-						checkBox.setSelected(false);
-					}
-				}
-			
-			if (viewers.isEmpty()) return;
-			
-			viewers.add(owner.username);
-			
+	private Thread getUploadThread() {
+		return new Thread(() -> {
 			try {
-				owner.subserver.createRoom(new Room(player.getVideo(), owner.username, viewers));
-			} catch (RemoteException e) {
-				addNotification("Couldn't create room, no connection to the server");
+				File file = fileChooser.getSelectedFile();
+				
+				if (file == null) throw new LoginException("No video selected for upload");
+				if (!owner.subserver.reserveVideo(file.getName(), owner.username)) throw new LoginException("Video '" + file.getName() + "' already exists");
+				
+				JTextArea notification = addNotification("Uploading video '" + file.getName() + "' 0%");
+				
+				try (InputStream is = new FileInputStream(file)) {
+					int readBytes;
+					byte[] b = new byte[Utils.PACKAGE_SIZE];
+					
+					long total = file.length();
+					long uploaded = 0;
+					while (!Thread.currentThread().isInterrupted() && (readBytes = is.read(b)) != -1) {
+						owner.subserver.uploadVideoDataToCentral(file.getName(), new Data(b, readBytes), owner.username);
+						uploaded += readBytes;
+						
+						notification.setText("Uploading video '" + file.getName() + "' " + (int) ((double) uploaded / total * 100) + "%");
+						revalidate();
+					}
+					
+					if (!Thread.currentThread().isInterrupted()) {
+						owner.subserver.finalizeVideo(file.getName(), owner.username);
+					}
+				}
 			} catch (LoginException e) {
 				addNotification(e.getMessage());
+			} catch (IOException | NullPointerException e) {
+				addNotification("No connection to the server, upload cancelled");
 			}
+			
+			uploadButton.setEnabled(true);
 		});
+	}
+	
+	// ========================
+	// WATCH PANEL
+	// ========================
+	private JPanel watchPanel() {
+		rooms.addItemListener(this::roomChangeEvent);
+		
+		createRoom.addActionListener((e) -> createRoomEvent());
 		
 		JPanel roomPanel = new JPanel(new BorderLayout());
 		usersPanel.setLayout(new BoxLayout(usersPanel, BoxLayout.PAGE_AXIS));
@@ -413,6 +283,141 @@ public class ClientGUI extends JFrame {
 		
 		return watchPanel;
 	}
+	
+	private Thread getOwnerThread(Room room) {
+		return new Thread(() -> {
+			try {
+				while (!Thread.currentThread().isInterrupted()) {
+					try {
+						Room finalRoom = owner.subserver.getRoomData(room.getID());
+						player.pause(finalRoom.getPaused());
+						player.seek(finalRoom.getTime());
+						
+						break;
+					} catch (RemoteException | LoginException e1) {
+						addNotification("Couldn't get room, no connection to the server, retrying");
+						Thread.sleep(1500);
+					}
+				}
+				
+				player.setControls(true);
+				
+				while (!Thread.currentThread().isInterrupted()) {
+					try {
+						owner.subserver.setRoomData(room.getID(), player.progress.getValue(), player.getPaused());
+					} catch (RemoteException | LoginException e1) {
+						addNotification("Couldn't update room, no connection to the server, retrying");
+						Thread.sleep(1000);
+					}
+					
+					Thread.sleep(250);
+				}
+			} catch (InterruptedException | ArrayIndexOutOfBoundsException ignored) {
+			}
+		});
+	}
+	
+	private Thread getGuestThread(Room room) {
+		return new Thread(() -> {
+			try {
+				while (!Thread.currentThread().isInterrupted()) {
+					try {
+						Room finalRoom = owner.subserver.getRoomData(room.getID());
+						player.pause(finalRoom.getPaused());
+						player.seek(finalRoom.getTime());
+						
+						break;
+					} catch (RemoteException | LoginException e1) {
+						addNotification("Couldn't get room, no connection to the server, retrying");
+						Thread.sleep(1000);
+					}
+				}
+				
+				while (!Thread.currentThread().isInterrupted()) {
+					try {
+						Room temp = owner.subserver.getRoomData(room.getID());
+						
+						System.out.println(temp.getTime() + " - " + player.getTime() + " = " + Math.abs(temp.getTime() - player.getTime()));
+						if (temp.getPaused()) {
+							player.pause(true);
+							if (temp.getTime() != player.getTime()) player.seek(temp.getTime());
+						} else {
+							if (player.getPaused() || Math.abs(temp.getTime() - player.getTime()) > 1000) player.seek(temp.getTime());
+							player.pause(false);
+						}
+						
+						Thread.sleep(250);
+					} catch (RemoteException | LoginException e1) {
+						player.pause(true);
+						addNotification("Couldn't refresh room, no connection to the server, retrying");
+						Thread.sleep(1000);
+					}
+				}
+			} catch (InterruptedException | ArrayIndexOutOfBoundsException ignored) {
+			}
+		});
+	}
+	
+	private void roomChangeEvent(ItemEvent e) {
+		if (e.getStateChange() != ItemEvent.SELECTED || tabbedPane.getSelectedIndex() != 1) return;
+		
+		Room room = (Room) e.getItem();
+		
+		player.setControls(false);
+		
+		if (syncThread != null) {
+			syncThread.interrupt();
+			try {
+				syncThread.join();
+			} catch (InterruptedException ex) {
+				ex.printStackTrace();
+			}
+		}
+		
+		if (room.toString().charAt(0) == '0') {
+			createRoom.setEnabled(true);
+			player.setControls(true);
+			return;
+		}
+		
+		createRoom.setEnabled(false);
+		
+		player.play("uploads/client/" + owner.username + "/" + room.video);
+		player.pause(true);
+		
+		syncThread = room.owner.equals(owner.username) ? getOwnerThread(room) : getGuestThread(room);
+		syncThread.start();
+	}
+	
+	private void createRoomEvent() {
+		if (player.getVideo() == null) return;
+		
+		ArrayList<String> viewers = new ArrayList<>();
+		
+		for (Component user : usersPanel.getComponents())
+			if (user instanceof JCheckBox) {
+				JCheckBox checkBox = (JCheckBox) user;
+				
+				if (checkBox.isSelected()) {
+					viewers.add(checkBox.getText());
+					checkBox.setSelected(false);
+				}
+			}
+		
+		if (viewers.isEmpty()) return;
+		
+		viewers.add(owner.username);
+		
+		try {
+			owner.subserver.createRoom(new Room(player.getVideo(), owner.username, viewers));
+		} catch (RemoteException e) {
+			addNotification("Couldn't create room, no connection to the server");
+		} catch (LoginException e) {
+			addNotification(e.getMessage());
+		}
+	}
+	
+	// ========================
 	
 	public void addRoom(Room room) {
 		rooms.addItem(room);
@@ -486,6 +491,8 @@ public class ClientGUI extends JFrame {
 		});
 		
 		videosPanel.add(video, 0);
+		addNotification("Downloaded video '" + title + "'");
+		
 		revalidate();
 	}
 	
@@ -494,6 +501,8 @@ public class ClientGUI extends JFrame {
 		user.setMaximumSize(new Dimension(Integer.MAX_VALUE, user.getMinimumSize().height));
 		
 		usersPanel.add(user);
+		addNotification("New user joined '" + username + "'");
+		
 		revalidate();
 	}
 }

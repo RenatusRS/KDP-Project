@@ -1,8 +1,8 @@
 package server;
 
 import shared.Data;
-import shared.Logger;
 import shared.Room;
+import shared.Utils;
 import shared.Video;
 import shared.interfaces.CentralServerInterface;
 import shared.interfaces.SubserverInterface;
@@ -12,6 +12,8 @@ import shared.remote.SubserverData;
 import javax.security.auth.login.LoginException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.rmi.RemoteException;
@@ -54,17 +56,14 @@ public class CentralServer implements CentralServerInterface {
 	
 	private final Logger log;
 	
-	public CentralServer(int port, boolean nogui) {
+	public CentralServer(int port, boolean nogui) throws UnknownHostException, RemoteException {
 		Video.setDestination("uploads/server/");
 		
-		log = new Logger(nogui ? System.out::print : (new CentralServerGUI(port))::print);
+		String ip = InetAddress.getLocalHost().getHostAddress();
+		log = new Logger(nogui ? System.out::print : (new ServerGUI("Central Server [" + ip + ":" + port + ", " + wakeupTime + "]", "centralserver"))::print);
 		
-		try {
-			LocateRegistry.createRegistry(port).rebind("/Central", UnicastRemoteObject.exportObject(this, 0));
-			log.info("Server started on " + port + " with ID " + wakeupTime);
-		} catch (RemoteException e) {
-			e.printStackTrace();
-		}
+		LocateRegistry.createRegistry(port).rebind("/Central", UnicastRemoteObject.exportObject(this, 0));
+		log.info("Server started on " + ip + ":" + port + " with ID " + wakeupTime);
 	}
 	
 	private void insert(ClientData client) {
@@ -103,46 +102,7 @@ public class CentralServer implements CentralServerInterface {
 			}
 			reconnectLock.unlock();
 			
-			SubserverData finalServer = server;
-			server.thread = new Thread(() -> {
-				int period = 16000;
-				int count = 1;
-				
-				try {
-					while (!finalServer.thread.isInterrupted() && count <= 3) {
-						log.info("Contacting subserver " + finalServer + " in " + period / 1000 + " seconds, attempt [" + count + "/3]");
-						Thread.sleep(period);
-						
-						try {
-							finalServer.server.status();
-							period = 16000;
-							count = 1;
-						} catch (IOException e) {
-							period /= 2;
-							count++;
-						}
-					}
-					
-					reconnectLock.lock();
-					if (!Thread.interrupted()) {
-						log.info("Subserver " + finalServer + " has not responded 3 times, deleting");
-						
-						removalLock.writeLock().lock();
-						userLock.lock();
-						
-						log.info("Assigning " + finalServer + " users a new subserver");
-						Collection<ClientData> clients = subservers.remove(finalServer.id).users.values();
-						for (ClientData client : clients) insert(client);
-						
-						userLock.unlock();
-						removalLock.writeLock().unlock();
-					}
-					reconnectLock.unlock();
-					
-				} catch (InterruptedException ignored) {
-				}
-			});
-			
+			server.thread = getServerStatusThread(server);
 			server.thread.start();
 			
 			userLock.lock();
@@ -154,6 +114,47 @@ public class CentralServer implements CentralServerInterface {
 		} catch (IOException e) {
 			log.info("Lost connection to subserver during its insertion");
 		}
+	}
+	
+	private Thread getServerStatusThread(SubserverData subserver) {
+		return new Thread(() -> {
+			int period = 16000;
+			int count = 1;
+			
+			try {
+				while (!subserver.thread.isInterrupted() && count <= 3) {
+					log.info("Contacting subserver " + subserver + " in " + period / 1000 + " seconds, attempt [" + count + "/3]");
+					Thread.sleep(period);
+					
+					try {
+						subserver.server.status();
+						period = 16000;
+						count = 1;
+					} catch (IOException e) {
+						period /= 2;
+						count++;
+					}
+				}
+				
+				reconnectLock.lock();
+				if (!Thread.interrupted()) {
+					log.info("Subserver " + subserver + " has not responded 3 times, deleting");
+					
+					removalLock.writeLock().lock();
+					userLock.lock();
+					
+					log.info("Assigning " + subserver + " users a new subserver");
+					Collection<ClientData> clients = subservers.remove(subserver.id).users.values();
+					for (ClientData client : clients) insert(client);
+					
+					userLock.unlock();
+					removalLock.writeLock().unlock();
+				}
+				reconnectLock.unlock();
+				
+			} catch (InterruptedException ignored) {
+			}
+		});
 	}
 	
 	@Override
@@ -169,7 +170,6 @@ public class CentralServer implements CentralServerInterface {
 				removalLock.readLock().unlock();
 				log.error("Username " + client + " is already taken", "Username is taken!");
 			}
-		
 		
 		log.info("User " + client + " registred");
 		
@@ -205,7 +205,6 @@ public class CentralServer implements CentralServerInterface {
 				removalLock.readLock().unlock();
 				log.error("Bad password for " + client + ", attempted: '" + client.password + "', real: " + unassignedUsers.get(client.username), "Wrong password!");
 			}
-			
 			
 			log.info("User " + client + " logged in, but no subserver to assign to yet");
 		} else {
@@ -276,23 +275,33 @@ public class CentralServer implements CentralServerInterface {
 			log.error("Central server already sending video '" + video + "' to subserver " + subserverID, "Video '" + video + "' is already being sent by the central server");
 		
 		requestedVideos.add(video + subserverID);
-		
-		(new Thread(() -> {
+		getUploadThread(video, subserverID).start();
+	}
+	
+	private Thread getUploadThread(String video, int subserverID) {
+		return new Thread(() -> {
 			Video videoFile = videos.get(video);
 			SubserverInterface subserver = subservers.get(subserverID).server;
 			
+			long total = videoFile.size();
+			long uploaded = 0;
 			try (InputStream is = videoFile.read()) {
 				int readBytes;
-				byte[] b = new byte[1024 * 1024 * 16];
+				byte[] b = new byte[Utils.PACKAGE_SIZE];
 				
-				while ((readBytes = is.read(b)) != -1) subserver.uploadCentralToSubserver(videoFile.name, new Data(b, readBytes));
+				while ((readBytes = is.read(b)) != -1) {
+					uploaded += readBytes;
+					log.info("Sending data for video '" + videoFile.name + "' to subserver '" + subserverID + "' [" + uploaded + "/" + total + ", " + videoFile.percent(uploaded) * 100 + "%]");
+					
+					subserver.uploadCentralToSubserver(videoFile.name, new Data(b, readBytes));
+				}
 				
 				subserver.finalizeVideoFromCentral(videoFile.name);
 			} catch (IOException e) {
 				log.info("Failed sending video '" + video + "' to subserver " + subserverID);
 				requestedVideos.remove(video + subserverID);
 			}
-		})).start();
+		});
 	}
 	
 	@Override
@@ -316,9 +325,8 @@ public class CentralServer implements CentralServerInterface {
 	}
 	
 	@Override
-	public synchronized void createRoom(Room room) {
+	public void createRoom(Room room) {
 		room.setID(roomID.getAndIncrement());
-		
 		rooms.add(room);
 		
 		log.info("Received request for room creation " + room);
@@ -327,11 +335,9 @@ public class CentralServer implements CentralServerInterface {
 	@Override
 	public ArrayList<String> getUsers() {
 		ArrayList<String> allUsers = new ArrayList<>(unassignedUsers.keySet());
-		
 		for (SubserverData server : subservers.values()) allUsers.addAll(server.users.keySet());
 		
 		log.info("Received request for all user names " + allUsers);
-		
 		return allUsers;
 	}
 	
@@ -346,7 +352,6 @@ public class CentralServer implements CentralServerInterface {
 	@Override
 	public ArrayList<Room> getRooms(String username) {
 		ArrayList<Room> allRooms = new ArrayList<>();
-		
 		for (Room room : rooms) if (room.viewers.contains(username)) allRooms.add(room);
 		
 		log.info("Received request for all rooms for user '" + username + "' " + allRooms);
@@ -356,16 +361,13 @@ public class CentralServer implements CentralServerInterface {
 	@Override
 	public ArrayList<String> getAllVideoNames() {
 		ArrayList<String> names = new ArrayList<>();
-		
 		for (Video video : videos.values()) if (video.finished) names.add(video.name);
 		
 		log.info("Received request for all video names " + names);
-		
 		return names;
 	}
 	
-	
-	public static void main(String[] args) {
+	public static void main(String[] args) throws UnknownHostException, RemoteException {
 		new CentralServer(args.length > 0 ? Integer.parseInt(args[0]) : 8000, args.length > 1 && args[1].equals("nogui"));
 	}
 }

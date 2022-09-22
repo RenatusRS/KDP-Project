@@ -56,7 +56,7 @@ public class Video {
 		return new File(destination + name).length();
 	}
 	
-	public double percent(long uploaded) {
-		return (double) uploaded / size();
+	public int percent(long uploaded) {
+		return (int) ((double) uploaded / size() * 100);
 	}
 }

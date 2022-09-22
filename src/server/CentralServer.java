@@ -291,7 +291,7 @@ public class CentralServer implements CentralServerInterface {
 				
 				while ((readBytes = is.read(b)) != -1) {
 					uploaded += readBytes;
-					log.info("Sending data for video '" + videoFile.name + "' to subserver '" + subserverID + "' [" + uploaded + "/" + total + ", " + videoFile.percent(uploaded) * 100 + "%]");
+					log.info("Sending data for video '" + videoFile.name + "' to subserver '" + subserverID + "' [" + uploaded + "/" + total + ", " + videoFile.percent(uploaded) + "%]");
 					
 					subserver.uploadCentralToSubserver(videoFile.name, new Data(b, readBytes));
 				}

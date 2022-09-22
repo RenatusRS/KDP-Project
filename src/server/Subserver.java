@@ -250,7 +250,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 				
 				while (!Thread.currentThread().isInterrupted() && (readBytes = is.read(b)) != -1) {
 					uploaded += readBytes;
-					log.info("Sending data for video '" + videoFile.name + "' to user '" + client.username + "' [" + uploaded + "/" + total + ", " + videoFile.percent(uploaded) * 100 + "%]");
+					log.info("Sending data for video '" + videoFile.name + "' to user '" + client.username + "' [" + uploaded + "/" + total + ", " + videoFile.percent(uploaded) + "%]");
 					
 					client.client.uploadSubserverToClient(videoFile.name, new Data(b, readBytes));
 				}

@@ -107,7 +107,7 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 		return new Thread(() -> {
 			try {
 				log.info("Trying to assign to user '" + client.username + "'");
-				client.client.assignSubserver(this, client.username, wakeupTime);
+				client.client.assignSubserver(this, client.username, wakeupTime, id);
 				log.info("User '" + client.username + "' has been assigned");
 			} catch (IOException e) {
 				log.info("Failed connecting to user '" + client.username + "'");

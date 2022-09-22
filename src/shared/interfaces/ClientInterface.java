@@ -11,5 +11,5 @@ public interface ClientInterface extends Remote {
 	
 	void finalizeVideo(String video) throws RemoteException;
 	
-	void assignSubserver(SubserverInterface subserver, String username, long wakeupTime) throws RemoteException, LoginException;
+	void assignSubserver(SubserverInterface subserver, String username, long wakeupTime, int id) throws RemoteException, LoginException;
 }

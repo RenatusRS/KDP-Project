@@ -40,6 +40,7 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 	String username;
 	
 	transient SubserverInterface subserver;
+	private int subserverID = -1;
 	
 	private final transient ClientGUI gui = new ClientGUI(this);
 	
@@ -81,7 +82,7 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 					
 					counter = 0;
 					
-					gui.labelConnection.setText(" STATUS: Connected");
+					gui.labelConnection.setText(" STATUS: Connected [" + subserverID + "]");
 					gui.labelConnection.setForeground(new Color(0, 102, 0));
 					
 					syncVideos();
@@ -159,11 +160,12 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 	}
 	
 	@Override
-	public synchronized void assignSubserver(SubserverInterface subserver, String username, long wakeupTime) throws LoginException {
+	public synchronized void assignSubserver(SubserverInterface subserver, String username, long wakeupTime, int id) throws LoginException {
 		if (this.wakeupTime != wakeupTime) throw new LoginException("The client " + this.username + " is from a different central server");
 		if (!username.equals(this.username)) throw new LoginException("This client is from user " + this.username + " now");
 		
 		this.subserver = subserver;
+		this.subserverID = id;
 	}
 	
 	public static void main(String[] args) throws RemoteException {

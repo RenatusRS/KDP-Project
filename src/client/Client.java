@@ -126,13 +126,15 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 		
 		for (String videoName : videoNames) {
 			try {
-				subserver.requestVideoFromSubserver(videoName, new ClientData(this, username, null));
-				Files.deleteIfExists(Path.of("uploads/client/" + username + "/" + videoName));
-				videos.put(videoName, new Video(videoName, null));
+				synchronized (videoName.intern()) {
+					subserver.requestVideoFromSubserver(videoName, new ClientData(this, username, null));
+					Files.deleteIfExists(Path.of("uploads/client/" + username + "/" + videoName));
+					videos.put(videoName, new Video(videoName, null));
+				}
 			} catch (LoginException e) {
 				System.out.println(e.getMessage());
 			} catch (IOException e) {
-				e.printStackTrace();
+				System.out.println("Error requesting video from subserver");
 			}
 		}
 	}
@@ -150,7 +152,9 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 	
 	@Override
 	public void uploadSubserverToClient(String video, Data data) {
-		videos.get(video).write(data);
+		synchronized (video.intern()) {
+			videos.get(video).write(data);
+		}
 	}
 	
 	@Override

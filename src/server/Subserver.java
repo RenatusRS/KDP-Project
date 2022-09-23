@@ -85,13 +85,16 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 		for (String videoName : videoNames) {
 			try {
 				log.info("Requesting video " + videoName);
-				server.requestVideoFromCentral(videoName, id);
-				Files.deleteIfExists(Path.of("uploads/subserver/" + id + "/" + videoName));
-				videos.put(videoName, new Video(videoName, null));
+				
+				synchronized (videoName.intern()) {
+					server.requestVideoFromCentral(videoName, id);
+					Files.deleteIfExists(Path.of("uploads/subserver/" + id + "/" + videoName));
+					videos.put(videoName, new Video(videoName, null));
+				}
 			} catch (LoginException e) {
 				log.info(e.getMessage());
 			} catch (IOException e) {
-				e.printStackTrace();
+				log.info("Error requesting video from central");
 			}
 		}
 	}
@@ -142,7 +145,9 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 	@Override
 	public void uploadCentralToSubserver(String video, Data data) {
 		log.info("Central server sending data '" + video + "'");
-		videos.get(video).write(data);
+		synchronized (video.intern()) {
+			videos.get(video).write(data);
+		}
 	}
 	
 	@Override

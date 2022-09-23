@@ -32,7 +32,7 @@ public class ServerGUI extends JFrame {
 	public void print(String text) {
 		textArea.append(text);
 		
-		if (scrollPane.getVerticalScrollBar().getValue() + scrollPane.getVerticalScrollBar().getModel().getExtent() >= scrollPane.getVerticalScrollBar().getModel().getMaximum() - 100)
+		if (scrollPane.getVerticalScrollBar().getValue() + scrollPane.getVerticalScrollBar().getModel().getExtent() >= scrollPane.getVerticalScrollBar().getModel().getMaximum() - 200)
 			textArea.setCaretPosition(textArea.getDocument().getLength());
 	}
 }

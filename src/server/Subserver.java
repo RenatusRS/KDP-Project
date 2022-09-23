@@ -85,8 +85,8 @@ public class Subserver extends UnicastRemoteObject implements SubserverInterface
 		for (String videoName : videoNames) {
 			try {
 				log.info("Requesting video " + videoName);
-				Files.deleteIfExists(Path.of("uploads/subserver/" + id + "/" + videoName));
 				server.requestVideoFromCentral(videoName, id);
+				Files.deleteIfExists(Path.of("uploads/subserver/" + id + "/" + videoName));
 				videos.put(videoName, new Video(videoName, null));
 			} catch (LoginException e) {
 				log.info(e.getMessage());

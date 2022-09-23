@@ -98,7 +98,7 @@ public class Client extends UnicastRemoteObject implements ClientInterface {
 					
 					Utils.sleep(2000);
 				} catch (LoginException e) {
-					gui.addNotification(e.getMessage());
+					System.out.println(e.getMessage());
 				}
 			}
 		});

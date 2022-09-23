@@ -5,8 +5,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class Utils {
-	public static final int PACKAGE_SIZE = 1024 * 1024 * 8; // 8MB
-	public static final String TIMEOUT = "7000";
+	public static final int PACKAGE_SIZE = 1024 * 1024 * 2; // 2MB
+	public static final String TIMEOUT = "10000";
 	
 	public static void cleanup(String location) {
 		Path path = Path.of(location);
